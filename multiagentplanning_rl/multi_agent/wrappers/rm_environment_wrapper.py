@@ -21,6 +21,19 @@ class RMEnvironmentWrapper:
         self.agents = agents  # List of agents
         self.reward_modifier = 1  # reward modifier to keep it close to 1 depending on length of optimal traces
 
+        self.waiting_agents = {agent.name: False for agent in agents}
+        self.no_op_actions = {
+            agent.name: self._find_no_op_action(agent) for agent in agents
+        }
+
+    def _find_no_op_action(self, agent):
+        for action in getattr(agent, "actions_", []) or []:
+            if action is None:
+                continue
+            if action.name.lower() in {"wait", "noop", "no_op", "no-op"}:
+                return action
+        return None
+
     def reset(self, seed):
         """
         Reset the environment and the Reward Machines to their initial states.
@@ -43,6 +56,18 @@ class RMEnvironmentWrapper:
         Returns:
             tuple: A tuple containing observations, rewards, terminations, truncations, and infos dictionaries.
         """
+        forced_waiting = set()
+        for agent in self.agents:
+            if not self.env.active_agents.get(agent.name, True):
+                self.waiting_agents[agent.name] = False
+                continue
+            if (
+                self.waiting_agents.get(agent.name)
+                and self.no_op_actions.get(agent.name) is not None
+            ):
+                actions[agent.name] = self.no_op_actions[agent.name]
+                forced_waiting.add(agent.name)
+
         observations, rewards, env_terminations, env_truncations, infos = self.env.step(
             actions
         )
@@ -56,8 +81,32 @@ class RMEnvironmentWrapper:
             ]  # observations[agent.name] == next_state
             next_state = observations[agent.name]
             state_rm = rm.get_current_state()
-            reward_rm = rm.step(next_state, state_rm)  # Get the reward from the RM
+            # reward_rm = rm.step(next_state, state_rm)  # Get the reward from the RM
+
+            reward_rm, event, _ = rm.step(
+                next_state, state_rm
+            )  # Get the reward from the RM
+
             new_state_rm = rm.get_current_state()
+
+            if agent.name in forced_waiting:
+                infos[agent.name]["forced_noop"] = True
+            else:
+                infos[agent.name]["forced_noop"] = False
+
+            if (
+                event is not None
+                and self._is_public_event(event)
+                and hasattr(self.env, "apply_public_effects")
+            ):
+                self.env.apply_public_effects(agent, event)
+                infos[agent.name]["public_event"] = event
+            else:
+                infos[agent.name]["public_event"] = None
+
+            self._update_waiting_state(
+                agent, rm, next_state, state_rm, new_state_rm, event
+            )
 
             # TODO CHECK - keeps final discounted reward close to 1
             reward_rm *= self.reward_modifier
@@ -107,6 +156,68 @@ class RMEnvironmentWrapper:
         truncations = env_truncations
 
         return observations, rewards, terminations, truncations, infos
+
+    def _update_waiting_state(
+        self, agent, rm, next_state, prev_state_rm, new_state_rm, event
+    ):
+        if new_state_rm != prev_state_rm:
+            self.waiting_agents[agent.name] = False
+            return
+
+        if event is not None and not self._event_requires_other_agents(event):
+            self.waiting_agents[agent.name] = False
+            return
+
+        satisfied_events = self._get_locally_satisfied_events(
+            agent, rm, next_state, prev_state_rm
+        )
+        waiting = any(
+            self._event_requires_other_agents(evt) for evt in satisfied_events
+        )
+        self.waiting_agents[agent.name] = waiting
+
+    def _get_locally_satisfied_events(self, agent, rm, state, state_rm):
+        event_detector = getattr(rm, "event_detector", None)
+        if event_detector is None:
+            return []
+
+        satisfied = []
+        try:
+            location_map = event_detector.get_current_location_map(state)
+        except Exception:
+            return []
+
+        for (from_state, conditions), _ in rm.transitions.items():
+            if from_state != state_rm:
+                continue
+            try:
+                if event_detector.check_local_conditions(
+                    conditions, location_map, state
+                ):
+                    satisfied.append(conditions)
+            except Exception:
+                continue
+        return satisfied
+
+    def _event_requires_other_agents(self, event):
+        if event is None:
+            return False
+        for condition in event:
+            if self._is_global_condition(condition):
+                return True
+        return False
+
+    def _is_public_event(self, event):
+        return self._event_requires_other_agents(event)
+
+    def _is_global_condition(self, condition):
+        key = condition[0] if isinstance(condition, (tuple, list)) else None
+        if not isinstance(key, tuple):
+            return False
+        if not key:
+            return False
+        first = key[0]
+        return not isinstance(first, int)
 
     def check_terminations(self):
         """

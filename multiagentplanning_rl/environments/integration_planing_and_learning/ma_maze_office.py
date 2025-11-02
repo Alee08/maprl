@@ -122,7 +122,7 @@ class MAP_RL_Env(BaseEnvironment):
         """
         # Aggiorna epsilon per il controllo dell'esplorazione
         self.rewards = {agent.name: 0 for agent in self.agents}
-        #self.epsilon = max(self.epsilon_end, self.epsilon_decay * self.epsilon)
+        # self.epsilon = max(self.epsilon_end, self.epsilon_decay * self.epsilon)
         self.timestep = 0
         self.current_state = {}
         # self.seq_ag = SequentialSimulatorMA(self)
@@ -264,6 +264,49 @@ class MAP_RL_Env(BaseEnvironment):
         observations = self.agent_states
 
         return observations, self.rewards, terminations, truncations, infos
+
+    def apply_public_effects(self, triggering_agent, event_conditions):
+        if not event_conditions:
+            return
+
+        updates_per_agent = defaultdict(dict)
+        for condition in event_conditions:
+            if not isinstance(condition, (tuple, list)) or len(condition) < 2:
+                continue
+            key, value = condition[0], condition[1]
+            if isinstance(key, tuple) and key and not isinstance(key[0], int):
+                agent_name = key[0]
+                fluent = key[1]
+            else:
+                agent_name = triggering_agent.name
+                fluent = key
+            updates_per_agent[agent_name][fluent] = value
+
+        if not updates_per_agent:
+            return
+
+        state = self.current_state_env
+        for fluents in updates_per_agent.values():
+            for fluent, value in fluents.items():
+                assigned_value = Bool(value) if isinstance(value, bool) else value
+                state = state.make_child({fluent: assigned_value})
+        self.current_state_env = state
+
+        for agent_name in updates_per_agent.keys():
+            agent_obj = next((a for a in self.agents if a.name == agent_name), None)
+            if agent_obj is None:
+                continue
+            ag_state = self.current_state_env.get_dot_values(
+                agent_obj, only_true_values=False
+            )
+            self.agent_states[agent_name].update(ag_state)
+            false_keys = [
+                fluent
+                for fluent, val in self.agent_states[agent_name].items()
+                if val is False
+            ]
+            for fluent in false_keys:
+                del self.agent_states[agent_name][fluent]
 
     def update_bridges_and_boats(self):
         """

@@ -10,7 +10,19 @@ class RewardMachine:
             transitions (dict): Dictionary of transitions in the form {(current_state, event): (new_state, reward)}.
             event_detector (EventDetector): An instance of EventDetector for detecting events in the environment.
         """
-        self.transitions = transitions  # {(current_state, event): (new_state, reward)}
+        # self.transitions = transitions  # {(current_state, event): (new_state, reward)}
+        self.transitions = {}
+        self.transition_metadata = {}
+        for key, value in transitions.items():
+            if (
+                isinstance(value, tuple)
+                and len(value) == 3
+                and isinstance(value[2], dict)
+            ):
+                self.transitions[key] = value[:2]
+                self.transition_metadata[key] = value[2]
+            else:
+                self.transitions[key] = value
         self.initial_state = self._get_start_state()  # Memorizza lo stato iniziale
         self.current_state = self.initial_state
         self.state_indices = self._generate_state_indices()
@@ -65,13 +77,19 @@ class RewardMachine:
         Returns:
             int: The reward obtained after the state transition.
         """
-        event = self.event_detector.detect_event(current_state, state_rm)
+        # event = self.event_detector.detect_event(current_state, state_rm)
+        event = None
+        if self.event_detector is not None:
+            event = self.event_detector.detect_event(current_state, state_rm)
         # print(f"Detected event: {event} for current state: {current_state}")
         if (self.current_state, event) in self.transitions:
             new_state, reward = self.transitions[(self.current_state, event)]
             self.current_state = new_state
-            return reward
-        return 0
+            # return reward
+            # return 0
+            metadata = self.transition_metadata.get((state_rm, event), {})
+            return reward, event, metadata
+        return 0, event, {}
 
     def get_reward(self, event):
         """
@@ -149,6 +167,10 @@ class RewardMachine:
             if current_state == state_rm:
                 possible_events.append(event)
         return possible_events
+
+    def get_transition_metadata(self, state_rm, event):
+        """Return metadata associated with a transition if available."""
+        return self.transition_metadata.get((state_rm, event), {})
 
     def get_current_state(self):
         """
