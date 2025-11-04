@@ -265,31 +265,88 @@ class MAP_RL_Env(BaseEnvironment):
 
         return observations, self.rewards, terminations, truncations, infos
 
+    def _find_dot_node_in_state(self, agent, fluent_label):
+        """Return the existing Dot fluent for the given agent and label if present."""
+
+        if fluent_label is None:
+            return None
+
+        label = str(fluent_label).strip()
+        current_instance = self.current_state_env
+        while current_instance is not None:
+            for key in current_instance._values.keys():
+                if not hasattr(key, "is_dot"):
+                    continue
+                if key.is_dot() and key.agent() == agent.name:
+                    key_label = str(key.args[0])
+                    if key_label == label or str(key) == label:
+                        return key
+            current_instance = current_instance._father
+        return None
+
+    def _wrap_public_effect_value(self, fluent_node, value):
+        """Convert raw Python literals into UP expressions compatible with the fluent."""
+
+        if isinstance(value, up.model.FNode):
+            return value
+
+        fluent_type = fluent_node.type
+        if fluent_type.is_bool_type():
+            return Bool(bool(value))
+        if fluent_type.is_int_type():
+            return Int(int(value))
+        if fluent_type.is_real_type():
+            return Real(float(value))
+        return value
+
+    def _resolve_public_effect_target(self, agent, fluent_identifier):
+        """Map the identifier coming from the RM metadata to an existing Dot fluent."""
+
+        if isinstance(fluent_identifier, up.model.FNode):
+            if fluent_identifier.is_dot():
+                label = str(fluent_identifier.args[0])
+            else:
+                label = str(fluent_identifier)
+        elif isinstance(fluent_identifier, tuple):
+            label = str(fluent_identifier[0])
+        else:
+            label = fluent_identifier
+
+        return self._find_dot_node_in_state(agent, label)
+
     def apply_public_effects(self, triggering_agent, event_conditions):
         if not event_conditions:
             return
 
-        updates_per_agent = defaultdict(dict)
+        updates_per_agent = defaultdict(list)
         for condition in event_conditions:
             if not isinstance(condition, (tuple, list)) or len(condition) < 2:
                 continue
             key, value = condition[0], condition[1]
             if isinstance(key, tuple) and key and not isinstance(key[0], int):
                 agent_name = key[0]
-                fluent = key[1]
+                fluent_identifier = key[1]
             else:
                 agent_name = triggering_agent.name
-                fluent = key
-            updates_per_agent[agent_name][fluent] = value
+                fluent_identifier = key
+            updates_per_agent[agent_name].append((fluent_identifier, value))
 
         if not updates_per_agent:
             return
 
         state = self.current_state_env
-        for fluents in updates_per_agent.values():
-            for fluent, value in fluents.items():
-                assigned_value = Bool(value) if isinstance(value, bool) else value
-                state = state.make_child({fluent: assigned_value})
+        for agent_name, fluents in updates_per_agent.items():
+            agent_obj = next((a for a in self.agents if a.name == agent_name), None)
+            if agent_obj is None:
+                continue
+            for fluent_identifier, value in fluents:
+                dot_node = self._resolve_public_effect_target(
+                    agent_obj, fluent_identifier
+                )
+                if dot_node is None:
+                    continue
+                assigned_value = self._wrap_public_effect_value(dot_node, value)
+                state = state.make_child({dot_node: assigned_value})
         self.current_state_env = state
 
         for agent_name in updates_per_agent.keys():
