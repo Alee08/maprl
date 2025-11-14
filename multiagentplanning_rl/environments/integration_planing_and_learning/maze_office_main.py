@@ -3,6 +3,7 @@ from multiagentplanning_rl.multi_agent.reward_machine import RewardMachine
 from unified_planning.shortcuts import *
 from unified_planning.model.multi_agent import *
 from collections import namedtuple
+import copy
 from unified_planning.io.ma_pddl_writer import MAPDDLWriter
 from multiagent_rlrm.multi_agent.agent_rl import AgentRL
 from multiagentplanning_rl.utils.ma_sequential_simulator import (
@@ -20,6 +21,9 @@ from multiagentplanning_rl.environments.integration_planing_and_learning.state_e
 )
 from multiagentplanning_rl.environments.integration_planing_and_learning.detect_event import (
     PositionEventDetector,
+)
+from multiagentplanning_rl.environments.integration_planing_and_learning.maze_office_config import (
+    build_experiment_patches,
 )
 from multiagentplanning_rl.multi_agent.wrappers.rm_environment_wrapper import (
     RMEnvironmentWrapper,
@@ -158,6 +162,14 @@ a2 = AgentRL("a2", env)
 a3 = AgentRL("a3", env)
 a4 = AgentRL("a4", env)
 a5 = AgentRL("a5", env)
+
+AGENT_MAP = {
+    "a1": a1,
+    "a2": a2,
+    "a3": a3,
+    "a4": a4,
+    "a5": a5,
+}
 
 Location = UserType("Location")
 max_x_value = env.grid_width
@@ -848,167 +860,67 @@ a5.add_rl_action(row_left)
 
 
 # Sequenza di azioni concorrenti
-transitions_ag_1 = RM_dict_true_seq["a1"]
-transitions_ag_2 = RM_dict_true_seq["a2"]
-transitions_ag_3 = RM_dict_true_seq["a3"]
-transitions_ag_4 = RM_dict_true_seq["a4"]
-transitions_ag_5 = RM_dict_true_seq["a5"]
-# breakpoint
-
-
-def setup_agent_rm(agent, transitions):
-    """
-    Sets up the Reward Machine for a specific agent and adds an event detector for the extracted events.
-
-    :param agent: The agent to set up with the Reward Machine
-    :param transitions: Transitions defining the Reward Machine
-    :return: Reward Machine and event detector instances
-    """
-    RM = RewardMachine(transitions, None)
-    event_detector = PositionEventDetector(RM.extract_events(), agent)
-    RM.event_detector = event_detector
-    agent.set_reward_machine(RM)
-    return RM, event_detector
-
-
-new_transitions_ag_1 = {
-    ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 0),
-    ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 0),
-    ("state2", ((coordinates_obj["letter"][0], True),)): ("state3", 0),
-    ("state3", ((goals["O"], True),)): ("state4", 0),
-    ("state4", ((goals["C"], True),)): ("state5", 0),
+BASE_TRANSITIONS = {
+    "a1": RM_dict_true_seq["a1"],
+    "a2": RM_dict_true_seq["a2"],
+    "a3": RM_dict_true_seq["a3"],
+    "a4": RM_dict_true_seq["a4"],
+    "a5": RM_dict_true_seq["a5"],
 }
 
-new_transitions_ag_2 = {
-    ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 0),
-    ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 0),
-    ("state2", ((coordinates_obj["letter"][0], True),)): ("state3", 0),
-    ("state3", ((goals["B"], True),)): ("state4", 0),
-    ("state4", ((goals["O"], True),)): ("state5", 0),
-}
-
-new_transitions_ag_3 = {
-    ("state1", ((goals["C"], True),)): ("state2", 0),
-    ("state2", ((coordinates_obj["letter"][0], True),)): ("state3", 0),
-    ("state3", ((coordinates_obj["coffee"][0], True),)): ("state4", 0),
-    ("state3", ((coordinates_obj["coffee"][1], True),)): ("state4", 0),
-    ("state3", ((goals["O"], True),)): ("state5", 0),
-}
-
-new_transitions_ag_4 = {
-    ("state1", ((goals["O"], True),)): ("state2", 0),
-    ("state2", ((coordinates_obj["coffee"][0], True),)): ("state3", 0),
-    ("state2", ((coordinates_obj["coffee"][1], True),)): ("state3", 0),
-    ("state3", ((coordinates_obj["letter"][0], True),)): ("state4", 0),
-    ("state4", ((goals["B"], True),)): ("state5", 0),
-}
-
-new_transitions_ag_5 = {
-    ("state1", ((goals["C"], True),)): ("state2", 0),
-    ("state2", ((coordinates_obj["letter"][0], True),)): ("state3", 0),
-    ("state3", ((coordinates_obj["coffee"][0], True),)): ("state4", 0),
-    ("state3", ((coordinates_obj["coffee"][1], True),)): ("state4", 0),
-    ("state4", ((goals["O"], True),)): ("state5", 0),
-}
-
-new_transitions_ag_5_and_ag2_exp = {
-    ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 0),
-    ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 0),
-}
-
-a2_new_transitions_ag_5_and_ag2_exp2 = {
-    ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 0),
-    ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 0),
-    ("state2", ((goals["B"], True),)): ("state3", 0),
-}
-
-a5_new_transitions_ag_5_and_ag2_exp2 = {
-    ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 0),
-    ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 0),
-    ("state2", ((goals["C"], True),)): ("state3", 0),
-}
-
-# TODO IQL exp2
-transitions_ag_2_exp2 = {
-    ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 0),
-    ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 0),
-    ("state2", ((goals["B"], True),)): ("state3", 0),
-    ("state3", ((("pos(l14)"), True),)): ("state4", 100),
-}
-transitions_ag_5_exp2 = {
-    ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 0),
-    ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 0),
-    ("state2", ((goals["C"], True),)): ("state3", 0),
-    ("state3", ((("pos(l14)"), True),)): ("state4", 100),
-}
-
-# TODO IQL exp1
-transitions_ag_2_exp1 = {
-    ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 10),
-    ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 10),
-    ("state2", ((("pos(l14)"), True),)): ("state4", 100),
-}
-transitions_ag_5_exp1 = {
-    ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 10),
-    ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 10),
-    ("state2", ((("pos(l14)"), True),)): ("state4", 100),
-}
-
-# TODO IQL exp 0 5agents (only MAP)
-transitions_ag5_ag2_exp0 = {
-    ("state2", ((("pos(l14)"), True),)): ("state4", 100),
-}
-transitions_ag1_ag3_ag4_exp0 = {
-    ("state2", ((("pos(l14)"), True),)): ("state4", 100),
-}
+EXPERIMENT_PATCHES = build_experiment_patches(coordinates_obj, goals)
 
 
-RM_1, event_detector1 = setup_agent_rm(a1, transitions_ag_1)
-RM_2, event_detector2 = setup_agent_rm(a2, transitions_ag_2)
-RM_3, event_detector3 = setup_agent_rm(a3, transitions_ag_3)
-RM_4, event_detector4 = setup_agent_rm(a4, transitions_ag_4)
-RM_5, event_detector5 = setup_agent_rm(a5, transitions_ag_5)
+def configure_reward_machines(experiment: str):
+    if experiment not in EXPERIMENT_PATCHES:
+        raise ValueError(f"Esperimento sconosciuto: {experiment}")
 
+    reward_machines = {}
+    event_detectors = {}
 
-# Aggiungi le nuove transizioni con il collegamento
-RM_1.add_transitions_with_merge(new_transitions_ag_1, position="before", prefix="new")
-RM_2.add_transitions_with_merge(new_transitions_ag_2, position="before", prefix="new")
-RM_3.add_transitions_with_merge(new_transitions_ag_3, position="before", prefix="new")
-RM_4.add_transitions_with_merge(new_transitions_ag_4, position="before", prefix="new")
-RM_5.add_transitions_with_merge(new_transitions_ag_5, position="before", prefix="new")
+    for agent_name, transitions in BASE_TRANSITIONS.items():
+        reward_machine = RewardMachine(copy.deepcopy(transitions), None)
+        reward_machines[agent_name] = reward_machine
 
+    for agent_name, patch in EXPERIMENT_PATCHES[experiment].items():
+        reward_machines[agent_name].add_transitions_with_merge(
+            copy.deepcopy(patch.transitions),
+            position=patch.position,
+            prefix=patch.prefix,
+        )
 
-# TODO deccomentare
+    for agent_name, reward_machine in reward_machines.items():
+        agent = AGENT_MAP[agent_name]
+        detector = PositionEventDetector(reward_machine.extract_events(), agent)
+        reward_machine.event_detector = detector
+        agent.set_reward_machine(reward_machine)
+        event_detectors[agent_name] = detector
 
+    logging.info(
+        "Configurazione delle reward machine completata per %s", experiment
+    )
 
-# Estrai gli eventi usando il metodo della classe
-a1_all_events = RM_1.extract_events()
-a2_all_events = RM_2.extract_events()
-a3_all_events = RM_3.extract_events()
-a4_all_events = RM_4.extract_events()
-a5_all_events = RM_5.extract_events()
-
-# Aggiungi gli eventi estratti all'EventDetector
-event_detector1.add_events(a1_all_events)
-event_detector2.add_events(a2_all_events)
-event_detector3.add_events(a3_all_events)
-event_detector4.add_events(a4_all_events)
-event_detector5.add_events(a5_all_events)
-
-
-a1.set_reward_machine(RM_1)
-a2.set_reward_machine(RM_2)
-a3.set_reward_machine(RM_3)
-a4.set_reward_machine(RM_4)
-a5.set_reward_machine(RM_5)
+    return reward_machines, event_detectors
 
 
 # Funzione principale per eseguire l'esperimento
-def run_experiment(num_episodes, wandb_enabled):
+def run_experiment(num_episodes, wandb_enabled, experiment):
+    reward_machines, _ = configure_reward_machines(experiment)
+
     if wandb_enabled:
-        wandb.init(project="maze_RL_new", entity="alee8", mode="online")
+        wandb.init(
+            project="maze_RL_new",
+            entity="alee8",
+            mode="online",
+            config={"experiment": experiment},
+        )
     else:
-        wandb.init(project="maze_RL_new", entity="alee8", mode="disabled")
+        wandb.init(
+            project="maze_RL_new",
+            entity="alee8",
+            mode="disabled",
+            config={"experiment": experiment},
+        )
     global NUM_EPISODES
     NUM_EPISODES = num_episodes
     # TODO deccomentare
@@ -1020,7 +932,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_1.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a1"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1038,7 +950,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_2.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a2"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1056,7 +968,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_3.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a3"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1074,7 +986,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_4.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a4"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1092,7 +1004,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_5.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a5"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1241,6 +1153,12 @@ def parse_args():
     parser.add_argument(
         "--wandb_enabled", action="store_true", help="Abilita l'invio dei log a WandB"
     )
+    parser.add_argument(
+        "--experiment",
+        choices=["exp1", "exp2", "exp3"],
+        default="exp1",
+        help="Seleziona il set di task da assegnare agli agenti",
+    )
     return parser.parse_args()
 
 
@@ -1249,4 +1167,8 @@ if __name__ == "__main__":
     args = parse_args()
 
     # Esegui l'esperimento con i parametri definiti da argparse
-    run_experiment(num_episodes=args.num_episodes, wandb_enabled=args.wandb_enabled)
+    run_experiment(
+        num_episodes=args.num_episodes,
+        wandb_enabled=args.wandb_enabled,
+        experiment=args.experiment,
+    )
