@@ -159,6 +159,15 @@ a3 = AgentRL("a3", env)
 a4 = AgentRL("a4", env)
 a5 = AgentRL("a5", env)
 
+AGENT_ORDER = [
+    ("a1", a1),
+    ("a2", a2),
+    ("a3", a3),
+    ("a4", a4),
+    ("a5", a5),
+]
+AGENTS_BY_LABEL = dict(AGENT_ORDER)
+
 Location = UserType("Location")
 max_x_value = env.grid_width
 max_y_value = env.grid_height
@@ -847,15 +856,6 @@ a5.add_rl_action(row_right)
 a5.add_rl_action(row_left)
 
 
-# Sequenza di azioni concorrenti
-transitions_ag_1 = RM_dict_true_seq["a1"]
-transitions_ag_2 = RM_dict_true_seq["a2"]
-transitions_ag_3 = RM_dict_true_seq["a3"]
-transitions_ag_4 = RM_dict_true_seq["a4"]
-transitions_ag_5 = RM_dict_true_seq["a5"]
-# breakpoint
-
-
 def setup_agent_rm(agent, transitions):
     """
     Sets up the Reward Machine for a specific agent and adds an event detector for the extracted events.
@@ -961,50 +961,45 @@ transitions_ag5_ag2_exp0 = {
 transitions_ag1_ag3_ag4_exp0 = {
     ("state2", ((("pos(l14)"), True),)): ("state4", 100),
 }
+# Funzione principale per eseguire l'esperimento
+def initialize_reward_machines(experiment):
+    rm_event_pairs = {}
+    for agent_label, agent in AGENT_ORDER:
+        transitions = RM_dict_true_seq[agent_label]
+        rm, event_detector = setup_agent_rm(agent, transitions)
+        rm_event_pairs[agent_label] = (rm, event_detector)
 
+    if experiment == "exp2":
+        rm_event_pairs["a2"][0].add_transitions_with_merge(
+            a2_new_transitions_ag_5_and_ag2_exp2, position="before", prefix="new"
+        )
+        rm_event_pairs["a5"][0].add_transitions_with_merge(
+            a5_new_transitions_ag_5_and_ag2_exp2, position="before", prefix="new"
+        )
+    elif experiment == "exp3":
+        exp3_transitions = {
+            "a1": new_transitions_ag_1,
+            "a2": new_transitions_ag_2,
+            "a3": new_transitions_ag_3,
+            "a4": new_transitions_ag_4,
+            "a5": new_transitions_ag_5,
+        }
+        for agent_label, transitions in exp3_transitions.items():
+            rm_event_pairs[agent_label][0].add_transitions_with_merge(
+                transitions, position="before", prefix="new"
+            )
 
-RM_1, event_detector1 = setup_agent_rm(a1, transitions_ag_1)
-RM_2, event_detector2 = setup_agent_rm(a2, transitions_ag_2)
-RM_3, event_detector3 = setup_agent_rm(a3, transitions_ag_3)
-RM_4, event_detector4 = setup_agent_rm(a4, transitions_ag_4)
-RM_5, event_detector5 = setup_agent_rm(a5, transitions_ag_5)
+    for agent_label, (rm, event_detector) in rm_event_pairs.items():
+        event_detector.add_events(rm.extract_events())
+        rm.event_detector = event_detector
+        AGENTS_BY_LABEL[agent_label].set_reward_machine(rm)
 
-
-# Aggiungi le nuove transizioni con il collegamento
-RM_1.add_transitions_with_merge(new_transitions_ag_1, position="before", prefix="new")
-RM_2.add_transitions_with_merge(new_transitions_ag_2, position="before", prefix="new")
-RM_3.add_transitions_with_merge(new_transitions_ag_3, position="before", prefix="new")
-RM_4.add_transitions_with_merge(new_transitions_ag_4, position="before", prefix="new")
-RM_5.add_transitions_with_merge(new_transitions_ag_5, position="before", prefix="new")
-
-
-# TODO deccomentare
-
-
-# Estrai gli eventi usando il metodo della classe
-a1_all_events = RM_1.extract_events()
-a2_all_events = RM_2.extract_events()
-a3_all_events = RM_3.extract_events()
-a4_all_events = RM_4.extract_events()
-a5_all_events = RM_5.extract_events()
-
-# Aggiungi gli eventi estratti all'EventDetector
-event_detector1.add_events(a1_all_events)
-event_detector2.add_events(a2_all_events)
-event_detector3.add_events(a3_all_events)
-event_detector4.add_events(a4_all_events)
-event_detector5.add_events(a5_all_events)
-
-
-a1.set_reward_machine(RM_1)
-a2.set_reward_machine(RM_2)
-a3.set_reward_machine(RM_3)
-a4.set_reward_machine(RM_4)
-a5.set_reward_machine(RM_5)
+    return {agent_label: rm for agent_label, (rm, _) in rm_event_pairs.items()}
 
 
 # Funzione principale per eseguire l'esperimento
-def run_experiment(num_episodes, wandb_enabled):
+def run_experiment(num_episodes, wandb_enabled, experiment):
+    reward_machines = initialize_reward_machines(experiment)
     if wandb_enabled:
         wandb.init(project="maze_RL_new", entity="alee8", mode="online")
     else:
@@ -1020,7 +1015,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_1.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a1"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1038,7 +1033,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_2.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a2"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1056,7 +1051,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_3.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a3"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1074,7 +1069,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_4.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a4"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1092,7 +1087,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_5.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a5"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1241,6 +1236,12 @@ def parse_args():
     parser.add_argument(
         "--wandb_enabled", action="store_true", help="Abilita l'invio dei log a WandB"
     )
+    parser.add_argument(
+        "--experiment",
+        choices=["exp1", "exp2", "exp3"],
+        default="exp1",
+        help="Seleziona il task da eseguire",
+    )
     return parser.parse_args()
 
 
@@ -1249,4 +1250,8 @@ if __name__ == "__main__":
     args = parse_args()
 
     # Esegui l'esperimento con i parametri definiti da argparse
-    run_experiment(num_episodes=args.num_episodes, wandb_enabled=args.wandb_enabled)
+    run_experiment(
+        num_episodes=args.num_episodes,
+        wandb_enabled=args.wandb_enabled,
+        experiment=args.experiment,
+    )
