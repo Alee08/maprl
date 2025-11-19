@@ -21,7 +21,6 @@ from multiagentplanning_rl.environments.utils_envs.evaluation_metrics import *
 import cProfile
 import json
 import pickle
-from building_RM import RM_dict, RM_dict_true, RM_dict_true_seq
 from multiagentplanning_rl.utils.message import Message
 from ma_maze_office import MAP_RL_Env
 from multiagentplanning_rl.render.render import EnvironmentRenderer
@@ -45,7 +44,7 @@ from multiagentplanning_rl.utils.utils import (
 )
 
 # from heatmap import generate_heatmaps
-#from multiagentplanning_rl.render.heatmap import generate_heatmaps
+# from multiagentplanning_rl.render.heatmap import generate_heatmaps
 import string
 from multiagentplanning_rl.multi_agent.action_rl import ActionRL
 import logging
@@ -193,6 +192,10 @@ a7 = AgentRL("a7", env)
 a8 = AgentRL("a8", env)
 a9 = AgentRL("a9", env)
 a10 = AgentRL("a10", env)
+
+ALL_AGENTS = [a1, a2, a3, a4, a5, a6, a7, a8, a9, a10]
+AGENT_ORDER = [agent.name for agent in ALL_AGENTS]
+AGENTS_BY_LABEL = {agent.name: agent for agent in ALL_AGENTS}
 
 Location = UserType("Location")
 max_x_value = env.grid_width
@@ -1097,29 +1100,6 @@ a10.add_rl_action(row_right)
 a10.add_rl_action(row_left)
 
 # Sequenza di azioni concorrenti
-transitions_ag_1 = RM_dict_true_seq["a1"]
-transitions_ag_2 = RM_dict_true_seq["a2"]
-transitions_ag_3 = RM_dict_true_seq["a3"]
-transitions_ag_4 = RM_dict_true_seq["a4"]
-transitions_ag_5 = RM_dict_true_seq["a5"]
-# breakpoint
-
-
-def setup_agent_rm(agent, transitions):
-    """
-    Sets up the Reward Machine for a specific agent and adds an event detector for the extracted events.
-
-    :param agent: The agent to set up with the Reward Machine
-    :param transitions: Transitions defining the Reward Machine
-    :return: Reward Machine and event detector instances
-    """
-    RM = RewardMachine(transitions, None)
-    event_detector = PositionEventDetector(RM.extract_events(), agent)
-    RM.event_detector = event_detector
-    agent.set_reward_machine(RM)
-    return RM, event_detector
-
-
 new_transitions_ag_1 = {
     ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 0),
     ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 0),
@@ -1446,6 +1426,66 @@ new_transitions_ag_10_exp3 = {
 # TODO###################################################################################################################
 
 
+def initialize_reward_machines(experiment):
+    reward_machines = {}
+
+    for agent_name in AGENT_ORDER:
+        base_transitions = copy.deepcopy(EXP1_TRANSITIONS[agent_name])
+        rm = RewardMachine(base_transitions, None)
+
+        if experiment in {"exp2", "exp3"}:
+            rm.add_transitions_with_merge(
+                copy.deepcopy(EXP2_PRE_TRANSITIONS),
+                position="before",
+                prefix="exp2",
+            )
+
+        if experiment == "exp3":
+            rm.add_transitions_with_merge(
+                copy.deepcopy(EXP3_TRANSITIONS[agent_name]),
+                position="before",
+                prefix="exp3",
+            )
+
+        event_detector = PositionEventDetector(
+            rm.extract_events(), AGENTS_BY_LABEL[agent_name]
+        )
+        rm.event_detector = event_detector
+        AGENTS_BY_LABEL[agent_name].set_reward_machine(rm)
+        reward_machines[agent_name] = rm
+
+    return reward_machines
+
+
+EXP1_TRANSITIONS = {
+    "a1": transitions_ag_1,
+    "a2": transitions_ag_2,
+    "a3": transitions_ag_3,
+    "a4": transitions_ag_4,
+    "a5": transitions_ag_5,
+    "a6": transitions_ag_6,
+    "a7": transitions_ag_7,
+    "a8": transitions_ag_8,
+    "a9": transitions_ag_9,
+    "a10": transitions_ag_10,
+}
+
+EXP2_PRE_TRANSITIONS = new_transitions_ag_exp2_PRE
+
+EXP3_TRANSITIONS = {
+    "a1": new_transitions_ag_1_exp3,
+    "a2": new_transitions_ag_2_exp3,
+    "a3": new_transitions_ag_3_exp3,
+    "a4": new_transitions_ag_4_exp3,
+    "a5": new_transitions_ag_5_exp3,
+    "a6": new_transitions_ag_6_exp3,
+    "a7": new_transitions_ag_7_exp3,
+    "a8": new_transitions_ag_8_exp3,
+    "a9": new_transitions_ag_9_exp3,
+    "a10": new_transitions_ag_10_exp3,
+}
+
+
 """transitions_ag_6 ={("state2", ((("pos(l14)"), True),)): ("state4", 100)}
 transitions_ag_7 ={("state2", ((("pos(l14)"), True),)): ("state4", 100)}
 transitions_ag_8 ={("state2", ((("pos(l14)"), True),)): ("state4", 100)}
@@ -1453,141 +1493,22 @@ transitions_ag_9 ={("state2", ((("pos(l14)"), True),)): ("state4", 100)}
 transitions_ag_10 ={("state2", ((("pos(l14)"), True),)): ("state4", 100)}
 """
 
-RM_1, event_detector1 = setup_agent_rm(a1, transitions_ag_1)
-RM_2, event_detector2 = setup_agent_rm(a2, transitions_ag_2)
-RM_3, event_detector3 = setup_agent_rm(a3, transitions_ag_3)
-RM_4, event_detector4 = setup_agent_rm(a4, transitions_ag_4)
-RM_5, event_detector5 = setup_agent_rm(a5, transitions_ag_5)
-
-RM_6, event_detector6 = setup_agent_rm(a6, transitions_ag_6)
-RM_7, event_detector7 = setup_agent_rm(a7, transitions_ag_7)
-RM_8, event_detector8 = setup_agent_rm(a8, transitions_ag_8)
-RM_9, event_detector9 = setup_agent_rm(a9, transitions_ag_9)
-RM_10, event_detector10 = setup_agent_rm(a10, transitions_ag_10)
-
-# Aggiungi le nuove transizioni con il collegamento
-RM_1.add_transitions_with_merge(
-    new_transitions_ag_exp2_PRE, position="before", prefix="new"
-)
-RM_2.add_transitions_with_merge(
-    new_transitions_ag_exp2_PRE, position="before", prefix="new"
-)
-RM_3.add_transitions_with_merge(
-    new_transitions_ag_exp2_PRE, position="before", prefix="new"
-)
-RM_4.add_transitions_with_merge(
-    new_transitions_ag_exp2_PRE, position="before", prefix="new"
-)
-RM_5.add_transitions_with_merge(
-    new_transitions_ag_exp2_PRE, position="before", prefix="new"
-)
-RM_6.add_transitions_with_merge(
-    new_transitions_ag_exp2_PRE, position="before", prefix="new"
-)
-RM_7.add_transitions_with_merge(
-    new_transitions_ag_exp2_PRE, position="before", prefix="new"
-)
-RM_8.add_transitions_with_merge(
-    new_transitions_ag_exp2_PRE, position="before", prefix="new"
-)
-RM_9.add_transitions_with_merge(
-    new_transitions_ag_exp2_PRE, position="before", prefix="new"
-)
-RM_10.add_transitions_with_merge(
-    new_transitions_ag_exp2_PRE, position="before", prefix="new"
-)
-
-RM_1.add_transitions_with_merge(
-    new_transitions_ag_1_exp3, position="before", prefix="new"
-)
-RM_2.add_transitions_with_merge(
-    new_transitions_ag_2_exp3, position="before", prefix="new"
-)
-RM_3.add_transitions_with_merge(
-    new_transitions_ag_3_exp3, position="before", prefix="new"
-)
-RM_4.add_transitions_with_merge(
-    new_transitions_ag_4_exp3, position="before", prefix="new"
-)
-RM_5.add_transitions_with_merge(
-    new_transitions_ag_5_exp3, position="before", prefix="new"
-)
-RM_6.add_transitions_with_merge(
-    new_transitions_ag_6_exp3, position="before", prefix="new"
-)
-RM_7.add_transitions_with_merge(
-    new_transitions_ag_7_exp3, position="before", prefix="new"
-)
-RM_8.add_transitions_with_merge(
-    new_transitions_ag_8_exp3, position="before", prefix="new"
-)
-RM_9.add_transitions_with_merge(
-    new_transitions_ag_9_exp3, position="before", prefix="new"
-)
-RM_10.add_transitions_with_merge(
-    new_transitions_ag_10_exp3, position="before", prefix="new"
-)
-
-# TODO deccomentare
-
-
-# Estrai gli eventi usando il metodo della classe
-a1_all_events = RM_1.extract_events()
-a2_all_events = RM_2.extract_events()
-a3_all_events = RM_3.extract_events()
-a4_all_events = RM_4.extract_events()
-a5_all_events = RM_5.extract_events()
-
-a6_all_events = RM_6.extract_events()
-a7_all_events = RM_7.extract_events()
-a8_all_events = RM_8.extract_events()
-a9_all_events = RM_9.extract_events()
-a10_all_events = RM_10.extract_events()
-
-# Aggiungi gli eventi estratti all'EventDetector
-event_detector1.add_events(a1_all_events)
-event_detector2.add_events(a2_all_events)
-event_detector3.add_events(a3_all_events)
-event_detector4.add_events(a4_all_events)
-event_detector5.add_events(a5_all_events)
-event_detector6.add_events(a6_all_events)
-event_detector7.add_events(a7_all_events)
-event_detector8.add_events(a8_all_events)
-event_detector9.add_events(a9_all_events)
-event_detector10.add_events(a10_all_events)
-
-
-a1.set_reward_machine(RM_1)
-a2.set_reward_machine(RM_2)
-a3.set_reward_machine(RM_3)
-a4.set_reward_machine(RM_4)
-a5.set_reward_machine(RM_5)
-
-a6.set_reward_machine(RM_6)
-a7.set_reward_machine(RM_7)
-a8.set_reward_machine(RM_8)
-a9.set_reward_machine(RM_9)
-a10.set_reward_machine(RM_10)
-
-
 # Funzione principale per eseguire l'esperimento
-def run_experiment(num_episodes, wandb_enabled):
+def run_experiment(num_episodes, wandb_enabled, experiment):
     if wandb_enabled:
         wandb.init(project="maze_RL_new", entity="alee8", mode="online")
     else:
         wandb.init(project="maze_RL_new", entity="alee8", mode="disabled")
     global NUM_EPISODES
     NUM_EPISODES = num_episodes
-    # TODO deccomentare
-    rm_env = RMEnvironmentWrapper(
-        env, [a1, a2, a3, a4, a5, a6, a7, a8, a9, a10]
-    )  # [a2, a5]) #[a1, a2, a3, a4, a5])
+    reward_machines = initialize_reward_machines(experiment)
+    rm_env = RMEnvironmentWrapper(env, ALL_AGENTS)  # [a2, a5]) #[a1, a2, a3, a4, a5])
     q_learning1 = QLearning(
         state_space_size=env.grid_width
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_1.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a1"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1605,7 +1526,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_2.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a2"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1623,7 +1544,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_3.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a3"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1641,7 +1562,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_4.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a4"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1659,7 +1580,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_5.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a5"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1677,7 +1598,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_6.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a6"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1694,7 +1615,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_7.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a7"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1711,7 +1632,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_8.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a8"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1728,7 +1649,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_9.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a9"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1745,7 +1666,7 @@ def run_experiment(num_episodes, wandb_enabled):
         * env.grid_height
         * env.cell_size
         * env.cell_size
-        * RM_10.numbers_state(),  # env.num_rm_states,
+        * reward_machines["a10"].numbers_state(),  # env.num_rm_states,
         action_space_size=13,
         learning_rate=0.5,
         gamma=0.9,
@@ -1900,6 +1821,12 @@ def parse_args():
     parser.add_argument(
         "--wandb_enabled", action="store_true", help="Abilita l'invio dei log a WandB"
     )
+    parser.add_argument(
+        "--experiment",
+        choices=["exp1", "exp2", "exp3"],
+        default="exp1",
+        help="Seleziona il task da eseguire",
+    )
     return parser.parse_args()
 
 
@@ -1908,4 +1835,8 @@ if __name__ == "__main__":
     args = parse_args()
 
     # Esegui l'esperimento con i parametri definiti da argparse
-    run_experiment(num_episodes=args.num_episodes, wandb_enabled=args.wandb_enabled)
+    run_experiment(
+        num_episodes=args.num_episodes,
+        wandb_enabled=args.wandb_enabled,
+        experiment=args.experiment,
+    )
