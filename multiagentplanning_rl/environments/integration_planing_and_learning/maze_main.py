@@ -182,6 +182,20 @@ renderer = EnvironmentRenderer(
     goals=goals,
     cell_size=100,  # Dimensione in pixel di una stanza
     in_cell_size=env.cell_size,  # Numero di sottocelle per dimensione all'interno della stanza
+    resource_overrides={
+        "plant": lambda renderer: (
+            "img/buco_lab.png",
+            (renderer.inner_cell_size, renderer.inner_cell_size),
+        ),
+        "coffee": lambda renderer: (
+            "img/torcia.png",
+            (renderer.inner_cell_size - 6, renderer.inner_cell_size - 6),
+        ),
+        "letter": lambda renderer: (
+            "img/remi.png",
+            (renderer.inner_cell_size, renderer.inner_cell_size),
+        ),
+    },
 )
 renderer.init_pygame()
 

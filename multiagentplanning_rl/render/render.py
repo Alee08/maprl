@@ -14,6 +14,7 @@ class EnvironmentRenderer:
         goals,
         in_cell_size,
         cell_size=1,
+        resource_overrides=None,
     ):
         self.grid_width = grid_width  # Number of rooms horizontally
         self.grid_height = grid_height  # Number of rooms vertically
@@ -25,6 +26,7 @@ class EnvironmentRenderer:
         self.agent_images = {}  # Cache for loaded agent images
         self.resources = {}  # Dictionary for loaded resources
         self.frames = []  # List to store frames for video rendering
+        self.resource_overrides = resource_overrides or {}
 
         # Calculate the image path
         self.img_path = os.path.dirname(__file__)
@@ -83,6 +85,12 @@ class EnvironmentRenderer:
             # "letter": ("img/remi.png", (self.inner_cell_size, self.inner_cell_size),),  # maze
             # "remi": ("img/remi.png", (self.inner_cell_size, self.inner_cell_size)),
         }
+
+        for name, resource in self.resource_overrides.items():
+            if callable(resource):
+                resource_info[name] = resource(self)
+            else:
+                resource_info[name] = resource
 
         # Load all resources defined in resource_info
         for name, (path, size) in resource_info.items():
