@@ -219,22 +219,34 @@ class EnvironmentRenderer:
             x1, y1 = cell1
             x2, y2 = cell2
 
-            if x1 == x2 and abs(y1 - y2) == 1:
-                # Horizontal wall
+            if x1 == x2:
+                # Draw horizontal wall segments along the shared column for every row between the cells
                 x_start = x1 * self.inner_cell_size
                 x_end = (x1 + 1) * self.inner_cell_size
-                y = (
-                    max(y1, y2) * self.inner_cell_size
-                )  # Wall at the top of the lower cell
-                pygame.draw.line(self.screen, (0, 0, 0), (x_start, y), (x_end, y), 5)
-            elif y1 == y2 and abs(x1 - x2) == 1:
-                # Vertical wall
+                y_min, y_max = sorted((y1, y2))
+                for y in range(y_min, y_max):
+                    y_boundary = (y + 1) * self.inner_cell_size
+                    pygame.draw.line(
+                        self.screen,
+                        (0, 0, 0),
+                        (x_start, y_boundary),
+                        (x_end, y_boundary),
+                        5,
+                    )
+            elif y1 == y2:
+                # Draw vertical wall segments along the shared row for every column between the cells
                 y_start = y1 * self.inner_cell_size
                 y_end = (y1 + 1) * self.inner_cell_size
-                x = (
-                    max(x1, x2) * self.inner_cell_size
-                )  # Wall on the left of the right cell
-                pygame.draw.line(self.screen, (0, 0, 0), (x, y_start), (x, y_end), 5)
+                x_min, x_max = sorted((x1, x2))
+                for x in range(x_min, x_max):
+                    x_boundary = (x + 1) * self.inner_cell_size
+                    pygame.draw.line(
+                        self.screen,
+                        (0, 0, 0),
+                        (x_boundary, y_start),
+                        (x_boundary, y_end),
+                        5,
+                    )
             else:
                 print(f"Invalid wall between {cell1} and {cell2}")
 
