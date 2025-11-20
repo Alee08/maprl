@@ -15,6 +15,7 @@ class EnvironmentRenderer:
         in_cell_size,
         cell_size=1,
         resource_overrides=None,
+        agent_image_map=None,
     ):
         self.grid_width = grid_width  # Number of rooms horizontally
         self.grid_height = grid_height  # Number of rooms vertically
@@ -27,6 +28,8 @@ class EnvironmentRenderer:
         self.resources = {}  # Dictionary for loaded resources
         self.frames = []  # List to store frames for video rendering
         self.resource_overrides = resource_overrides or {}
+        self.agent_image_map = agent_image_map
+        self._resolved_agent_image_map = None
 
         # Calculate the image path
         self.img_path = os.path.dirname(__file__)
@@ -65,6 +68,8 @@ class EnvironmentRenderer:
             "holes": ("img/hole.png", (90, 90)),
             "ponte_immagine": ("img/ponte_.png", (40, 40)),
             "barca_a_remi": ("img/barca_.png", (40, 40)),
+            "employee_door": ("img/employee_door.png", (40, 40)),
+            "manager_door": ("img/door_manager.png", (40, 40)),
             "plant": (
                 "img/pianta.png",
                 (self.inner_cell_size, self.inner_cell_size),
@@ -112,8 +117,7 @@ class EnvironmentRenderer:
             "a10": ("img/we.png", (self.inner_cell_size-5, self.inner_cell_size-5)),
             # Add more mappings if needed...
         }"""
-        # maze
-        image_map = {
+        default_image_map = {
             "a1": ("img/o.png", (self.inner_cell_size - 5, self.inner_cell_size - 5)),
             "a2": ("img/juve.png", (self.inner_cell_size, self.inner_cell_size)),
             "a3": ("img/o.png", (self.inner_cell_size - 5, self.inner_cell_size - 5)),
@@ -126,6 +130,14 @@ class EnvironmentRenderer:
             "a10": ("img/we.png", (self.inner_cell_size - 5, self.inner_cell_size - 5)),
             # Add more mappings if needed...
         }
+
+        # Resolve dynamic agent image map if provided as a callable
+        if callable(self.agent_image_map) and self._resolved_agent_image_map is None:
+            self._resolved_agent_image_map = self.agent_image_map(self)
+
+        image_map = (
+            self._resolved_agent_image_map or self.agent_image_map or default_image_map
+        )
 
         # Default image path and size
         default_image_path = "img/bcn_man2.png"
@@ -228,6 +240,8 @@ class EnvironmentRenderer:
 
         self._draw_connectors("bridges", "ponte_immagine")
         self._draw_connectors("boats", "barca_a_remi")
+        self._draw_connectors("doors", "employee_door")
+        self._draw_connectors("manager_doors", "manager_door")
 
         # Draw the objects using absolute coordinates
         for obj_type in ["plant", "coffee", "letter"]:

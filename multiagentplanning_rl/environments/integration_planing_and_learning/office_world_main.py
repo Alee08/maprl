@@ -132,7 +132,44 @@ object_positions = {
     "coffee": coordinates_obj["coffee"],
     "letter": coordinates_obj["letter"],
     "office_walls": walls,
+    "doors": [],
+    "manager_doors": [],
 }
+
+
+def find_connector_between_rooms(room_a, room_b, walls_set):
+    """Return the first pair of adjacent cells between two rooms without a wall."""
+
+    room_b_cells = set(room_b)
+    for x, y in room_a:
+        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+            neighbor = (x + dx, y + dy)
+            if neighbor in room_b_cells and ((x, y), neighbor) not in walls_set:
+                return (x, y), neighbor
+    return None
+
+
+def build_connectors(pairs, rooms, walls):
+    """Build drawable connectors for the provided room pairs."""
+
+    walls_set = set()
+    for cell_a, cell_b in walls:
+        walls_set.add((cell_a, cell_b))
+        walls_set.add((cell_b, cell_a))
+
+    connectors = []
+    for room_a, room_b in pairs:
+        if room_a not in rooms or room_b not in rooms:
+            continue
+
+        connector_cells = find_connector_between_rooms(
+            rooms[room_a], rooms[room_b], walls_set
+        )
+        if connector_cells:
+            connectors.append(connector_cells)
+
+    return connectors
+
 
 env = MAP_RL_Env(
     width=grid_width,
@@ -591,10 +628,18 @@ env.set_initial_value(has_door(l14, l13), True)  # TODO attenzione qui
 env.set_initial_value(is_connected(l13, l14), False)
 env.set_initial_value(is_connected(l14, l13), False)
 
+door_pairs = {("l13", "l14")}
+renderer.object_positions["doors"] = build_connectors(door_pairs, rooms, walls)
+
 env.set_initial_value(has_door_manager(l14, l24), True)  # TODO attenzione qui
 env.set_initial_value(has_door_manager(l24, l14), True)  # TODO attenzione qui
 env.set_initial_value(is_connected(l14, l24), False)
 env.set_initial_value(is_connected(l24, l14), False)
+
+manager_door_pairs = {("l14", "l24")}
+renderer.object_positions["manager_doors"] = build_connectors(
+    manager_door_pairs, rooms, walls
+)
 
 # 10x10 griglia:
 env.set_initial_value(is_connected(l14, l15), False)

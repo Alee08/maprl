@@ -160,7 +160,44 @@ object_positions = {
     "coffee": coordinates_obj["coffee"],
     "letter": coordinates_obj["letter"],
     "office_walls": walls,
+    "bridges": [],
+    "boats": [],
 }
+
+
+def find_connector_between_rooms(room_a, room_b, walls_set):
+    """Return the first pair of adjacent cells between two rooms without a wall."""
+
+    room_b_cells = set(room_b)
+    for x, y in room_a:
+        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+            neighbor = (x + dx, y + dy)
+            if neighbor in room_b_cells and ((x, y), neighbor) not in walls_set:
+                return (x, y), neighbor
+    return None
+
+
+def build_connectors(pairs, rooms, walls):
+    """Build drawable connectors for the provided room pairs."""
+
+    walls_set = set()
+    for cell_a, cell_b in walls:
+        walls_set.add((cell_a, cell_b))
+        walls_set.add((cell_b, cell_a))
+
+    connectors = []
+    for room_a, room_b in pairs:
+        if room_a not in rooms or room_b not in rooms:
+            continue
+
+        connector_cells = find_connector_between_rooms(
+            rooms[room_a], rooms[room_b], walls_set
+        )
+        if connector_cells:
+            connectors.append(connector_cells)
+
+    return connectors
+
 
 env = MAP_RL_Env(
     width=grid_width,
@@ -190,6 +227,41 @@ renderer = EnvironmentRenderer(
         "letter": lambda renderer: (
             "img/tesoro.png",
             (renderer.inner_cell_size - 3, renderer.inner_cell_size - 3),
+        ),
+        "ponte_immagine": lambda renderer: ("img/carrucola.png", (40, 40)),
+        "barca_a_remi": lambda renderer: ("img/masso.png", (40, 40)),
+    },
+    agent_image_map=lambda renderer: {
+        "a1": (
+            "img/ita_man.png",
+            (renderer.inner_cell_size, renderer.inner_cell_size),
+        ),
+        "a2": ("img/juve.png", (renderer.inner_cell_size, renderer.inner_cell_size)),
+        "a3": (
+            "img/bcn_man2.png",
+            (renderer.inner_cell_size, renderer.inner_cell_size),
+        ),
+        "a4": ("img/CR7.png", (renderer.inner_cell_size, renderer.inner_cell_size)),
+        "a5": ("img/juve.png", (renderer.inner_cell_size, renderer.inner_cell_size)),
+        "a6": (
+            "img/we.png",
+            (renderer.inner_cell_size - 5, renderer.inner_cell_size - 5),
+        ),
+        "a7": (
+            "img/o.png",
+            (renderer.inner_cell_size - 5, renderer.inner_cell_size - 5),
+        ),
+        "a8": (
+            "img/o.png",
+            (renderer.inner_cell_size - 5, renderer.inner_cell_size - 5),
+        ),
+        "a9": (
+            "img/o.png",
+            (renderer.inner_cell_size - 5, renderer.inner_cell_size - 5),
+        ),
+        "a10": (
+            "img/we.png",
+            (renderer.inner_cell_size - 5, renderer.inner_cell_size - 5),
         ),
     },
 )
@@ -708,6 +780,12 @@ env.set_initial_value(has_boat(l14, l24), True)  # TODO attenzione qui
 env.set_initial_value(has_boat(l24, l14), True)  # TODO attenzione qui
 env.set_initial_value(is_connected(l14, l24), False)
 env.set_initial_value(is_connected(l24, l14), False)
+
+bridge_pairs = {("l13", "l14"), ("l78", "l88"), ("l66", "l67"), ("l72", "l73")}
+boat_pairs = {("l14", "l24"), ("l86", "l87"), ("l17", "l18"), ("l28", "l18")}
+
+renderer.object_positions["bridges"] = build_connectors(bridge_pairs, rooms, walls)
+renderer.object_positions["boats"] = build_connectors(boat_pairs, rooms, walls)
 
 # Setto i ponti
 # Lista dei nomi desiderati
@@ -1733,11 +1811,13 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
         else:
             exploration = True  # Usa la policy con esplorazione
 
-        record_episode = episode % 10000 == 0 and episode != 0
+        record_episode = episode % 10000 == 0  # and episode != 0
         # record_episode = False
         if record_episode:
             renderer.render(episode, states)  # Cattura frame durante l'episodio
             actions_log = {agent.name: [] for agent in env.agents}
+            renderer.save_episode(episode)
+            breakpoint()
 
         while any(rm_env.env.active_agents.values()):
             total_training_steps += 1
