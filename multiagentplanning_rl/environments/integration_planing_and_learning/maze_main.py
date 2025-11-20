@@ -164,6 +164,8 @@ object_positions = {
     "coffee": coordinates_obj["coffee"],
     "letter": coordinates_obj["letter"],
     "office_walls": walls,
+    "bridges": [],
+    "boats": [],
 }
 
 env = MAP_RL_Env(
@@ -396,6 +398,40 @@ def create_wall_connections(walls, env):
         )
 
     return is_wall
+
+
+def find_connector_between_rooms(room_a, room_b, walls_set):
+    """Return the first pair of adjacent cells between two rooms without a wall."""
+
+    room_b_cells = set(room_b)
+    for x, y in room_a:
+        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+            neighbor = (x + dx, y + dy)
+            if neighbor in room_b_cells and ((x, y), neighbor) not in walls_set:
+                return (x, y), neighbor
+    return None
+
+
+def build_connectors(pairs, rooms, walls):
+    """Build drawable connectors for the provided room pairs."""
+
+    walls_set = set()
+    for cell_a, cell_b in walls:
+        walls_set.add((cell_a, cell_b))
+        walls_set.add((cell_b, cell_a))
+
+    connectors = []
+    for room_a, room_b in pairs:
+        if room_a not in rooms or room_b not in rooms:
+            continue
+
+        connector_cells = find_connector_between_rooms(
+            rooms[room_a], rooms[room_b], walls_set
+        )
+        if connector_cells:
+            connectors.append(connector_cells)
+
+    return connectors
 
 
 def test_policy(rm_env, episode, play=False):
@@ -763,6 +799,13 @@ env.set_initial_value(has_bridge(l45, l35), True)  # TODO attenzione qui
 env.set_initial_value(is_connected(l35, l45), False)
 env.set_initial_value(is_connected(l45, l35), False)
 
+
+bridge_pairs = {("l13", "l14"), ("l31", "l41"), ("l25", "l35"), ("l35", "l45")}
+boat_pairs = {("l14", "l24"), ("l41", "l42")}
+
+renderer.object_positions["bridges"] = build_connectors(bridge_pairs, rooms, walls)
+renderer.object_positions["boats"] = build_connectors(boat_pairs, rooms, walls)
+# breakpoint()
 
 # l17, l18, l28
 """env.set_initial_value(has_bridge(l78, l88), True) #TODO attenzione qui
@@ -1722,7 +1765,7 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
         else:
             exploration = True  # Usa la policy con esplorazione
 
-        record_episode = episode % 1000 == 0 and episode != 0
+        record_episode = episode % 1000 == 0  # and episode != 0
         # record_episode = False
         if record_episode:
             renderer.render(episode, states)  # Cattura frame durante l'episodio

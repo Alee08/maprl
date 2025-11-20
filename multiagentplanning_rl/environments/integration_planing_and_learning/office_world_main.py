@@ -571,28 +571,28 @@ is_connected = create_cell_connections(_connections, env)
 is_wall = create_wall_connections(walls, env)
 
 
-bridge = UserType("bridge")
-br1 = Object("br1", bridge)
-br2 = Object("br2", bridge)
-br3 = Object("br3", bridge)
-env.add_object(br1)
-env.add_object(br2)
-env.add_object(br3)
-has_bridge = Fluent(
-    "has_bridge", BoolType(), connect_from=Location, connect_to=Location
+door = UserType("door")
+dr1 = Object("dr1", door)
+dr2 = Object("dr2", door)
+dr3 = Object("dr3", door)
+env.add_object(dr1)
+env.add_object(dr2)
+env.add_object(dr3)
+has_door = Fluent("has_door", BoolType(), connect_from=Location, connect_to=Location)
+has_door_manager = Fluent(
+    "has_door_manager", BoolType(), connect_from=Location, connect_to=Location
 )
-has_boat = Fluent("has_boat", BoolType(), connect_from=Location, connect_to=Location)
-env.ma_environment.add_fluent(has_bridge, default_initial_value=False)
-env.ma_environment.add_fluent(has_boat, default_initial_value=False)
+env.ma_environment.add_fluent(has_door, default_initial_value=False)
+env.ma_environment.add_fluent(has_door_manager, default_initial_value=False)
 
 # Setto i ponti
-env.set_initial_value(has_bridge(l13, l14), True)  # TODO attenzione qui
-env.set_initial_value(has_bridge(l14, l13), True)  # TODO attenzione qui
+env.set_initial_value(has_door(l13, l14), True)  # TODO attenzione qui
+env.set_initial_value(has_door(l14, l13), True)  # TODO attenzione qui
 env.set_initial_value(is_connected(l13, l14), False)
 env.set_initial_value(is_connected(l14, l13), False)
 
-env.set_initial_value(has_boat(l14, l24), True)  # TODO attenzione qui
-env.set_initial_value(has_boat(l24, l14), True)  # TODO attenzione qui
+env.set_initial_value(has_door_manager(l14, l24), True)  # TODO attenzione qui
+env.set_initial_value(has_door_manager(l24, l14), True)  # TODO attenzione qui
 env.set_initial_value(is_connected(l14, l24), False)
 env.set_initial_value(is_connected(l24, l14), False)
 
@@ -701,87 +701,87 @@ low_right.add_increase_effect(pos_i, 1)
 
 cross_up = InstantaneousAction("cross_up", l_from=Location, l_to=Location)
 cross_up.add_precondition(LT(0, pos_y))
-cross_up.add_precondition(has_bridge(l_from, l_to))
+cross_up.add_precondition(has_door(l_from, l_to))
 cross_up.add_precondition(Equals(pos_j, 0))
 cross_up.add_decrease_effect(pos_y, 1)
 cross_up.add_effect(pos_j, env.cell_size - 1)
 cross_up.add_effect(pos(l_to), True)
 cross_up.add_effect(pos(l_from), False)
-# cross_up.add_effect(has_bridge(l_from, l_to), False)
+# cross_up.add_effect(has_door(l_from, l_to), False)
 # cross_up.add_effect(pos_x, env.get_coordinates_by_location(a1, l_to)[0], True)
 # cross_up.add_effect(pos_y, env.get_coordinates_by_location(a1, l_to)[1], True)
 
 cross_down = InstantaneousAction("cross_down", l_from=Location, l_to=Location)
 cross_down.add_precondition(LT(pos_y, max_y_value - 1))
-cross_down.add_precondition(has_bridge(l_from, l_to))
+cross_down.add_precondition(has_door(l_from, l_to))
 cross_down.add_precondition(Equals(pos_j, env.cell_size - 1))
 cross_down.add_increase_effect(pos_y, 1)
 cross_down.add_effect(pos_j, 0)
 cross_down.add_effect(pos(l_to), True)
 cross_down.add_effect(pos(l_from), False)
-# cross_down.add_effect(has_bridge(l_from, l_to), False)
+# cross_down.add_effect(has_door(l_from, l_to), False)
 
 cross_right = InstantaneousAction("cross_right", l_from=Location, l_to=Location)
 cross_right.add_precondition(LT(pos_x, max_x_value - 1))
-cross_right.add_precondition(has_bridge(l_from, l_to))
+cross_right.add_precondition(has_door(l_from, l_to))
 cross_right.add_precondition(Equals(pos_i, env.cell_size - 1))
 cross_right.add_increase_effect(pos_x, 1)
 cross_right.add_effect(pos_i, 0)
 cross_right.add_effect(pos(l_to), True)
 cross_right.add_effect(pos(l_from), False)
-# cross_right.add_effect(has_bridge(l_from, l_to), False)
+# cross_right.add_effect(has_door(l_from, l_to), False)
 
 cross_left = InstantaneousAction("cross_left", l_from=Location, l_to=Location)
 cross_left.add_precondition(LT(0, pos_x))
-cross_left.add_precondition(has_bridge(l_from, l_to))
+cross_left.add_precondition(has_door(l_from, l_to))
 cross_left.add_precondition(Equals(pos_i, 0))
 cross_left.add_decrease_effect(pos_x, 1)
 cross_left.add_effect(pos_i, env.cell_size - 1)
 cross_left.add_effect(pos(l_to), True)
 cross_left.add_effect(pos(l_from), False)
-# cross_left.add_effect(has_bridge(l_from, l_to), False)
+# cross_left.add_effect(has_door(l_from, l_to), False)
 
 wait = InstantaneousAction("wait", l_from=Location, l_to=Location)
 wait.add_decrease_effect(pos_x, 0)
 
 row_up = InstantaneousAction("row_up", l_from=Location, l_to=Location)
 row_up.add_precondition(LT(0, pos_y))
-row_up.add_precondition(has_boat(l_from, l_to))
+row_up.add_precondition(has_door_manager(l_from, l_to))
 row_up.add_effect(pos_i, env.cell_size - 1)
 row_up.add_decrease_effect(pos_y, 1)
 row_up.add_effect(pos_j, env.cell_size - 1)
-# row_up.add_effect(has_boat(l_from, l_to), False)
+# row_up.add_effect(has_door_manager(l_from, l_to), False)
 row_up.add_effect(pos(l_to), True)
 row_up.add_effect(pos(l_from), False)
 
 
 row_down = InstantaneousAction("row_down", l_from=Location, l_to=Location)
 row_down.add_precondition(LT(pos_y, max_y_value - 1))
-row_down.add_precondition(has_boat(l_from, l_to))
+row_down.add_precondition(has_door_manager(l_from, l_to))
 row_down.add_precondition(Equals(pos_j, env.cell_size - 1))
 row_down.add_increase_effect(pos_y, 1)
 row_down.add_effect(pos_j, 0)
-# row_down.add_effect(has_boat(l_from, l_to), False)
+# row_down.add_effect(has_door_manager(l_from, l_to), False)
 row_down.add_effect(pos(l_to), True)
 row_down.add_effect(pos(l_from), False)
 
 row_right = InstantaneousAction("row_right", l_from=Location, l_to=Location)
 row_right.add_precondition(LT(pos_x, max_x_value - 1))
-row_right.add_precondition(has_boat(l_from, l_to))
+row_right.add_precondition(has_door_manager(l_from, l_to))
 row_right.add_precondition(Equals(pos_i, env.cell_size - 1))
 row_right.add_increase_effect(pos_x, 1)
 row_right.add_effect(pos_i, 0)
-# row_right.add_effect(has_boat(l_from, l_to), False)
+# row_right.add_effect(has_door_manager(l_from, l_to), False)
 row_right.add_effect(pos(l_to), True)
 row_right.add_effect(pos(l_from), False)
 
 row_left = InstantaneousAction("row_left", l_from=Location, l_to=Location)
 row_left.add_precondition(LT(0, pos_x))
-row_left.add_precondition(has_boat(l_from, l_to))
+row_left.add_precondition(has_door_manager(l_from, l_to))
 row_left.add_precondition(Equals(pos_i, 0))
 row_left.add_decrease_effect(pos_x, 1)
 row_left.add_effect(pos_i, env.cell_size - 1)
-# row_right.add_effect(has_boat(l_from, l_to), False)
+# row_right.add_effect(has_door_manager(l_from, l_to), False)
 row_left.add_effect(pos(l_to), True)
 row_left.add_effect(pos(l_from), False)
 
@@ -1139,6 +1139,9 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
         if record_episode:
             renderer.render(episode, states)  # Cattura frame durante l'episodio
             actions_log = {agent.name: [] for agent in env.agents}
+            """renderer.save_episode(
+                episode
+            )"""
 
         while any(rm_env.env.active_agents.values()):
             total_training_steps += 1

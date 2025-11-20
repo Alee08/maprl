@@ -226,6 +226,9 @@ class EnvironmentRenderer:
             else:
                 print(f"Invalid wall between {cell1} and {cell2}")
 
+        self._draw_connectors("bridges", "ponte_immagine")
+        self._draw_connectors("boats", "barca_a_remi")
+
         # Draw the objects using absolute coordinates
         for obj_type in ["plant", "coffee", "letter"]:
             for x, y in self.object_positions.get(obj_type, []):
@@ -287,9 +290,31 @@ class EnvironmentRenderer:
         frame = pygame.surfarray.array3d(self.screen).transpose([1, 0, 2])
         self.frames.append(frame)
 
+    def _draw_connectors(self, connector_key, resource_key):
+        connector_pairs = self.object_positions.get(connector_key, [])
+        if not connector_pairs:
+            return
+
+        image = self.resources.get(resource_key)
+        if not image:
+            return
+
+        img_width, img_height = image.get_size()
+
+        for cell1, cell2 in connector_pairs:
+            (x1, y1), (x2, y2) = cell1, cell2
+
+            center_x = ((x1 + x2) / 2 + 0.5) * self.inner_cell_size
+            center_y = ((y1 + y2) / 2 + 0.5) * self.inner_cell_size
+
+            blit_x = center_x - img_width / 2
+            blit_y = center_y - img_height / 2
+
+            self.screen.blit(image, (blit_x, blit_y))
+
     def save_episode(self, episode):
-        # if episode == 0: #Save first frame
-        # self.save_first_frame("maze.png")
+        if episode == 0:  # Save first frame
+            self.save_first_frame("maze_______________________.png")
         # Create the "episodes" folder if it doesn't exist
         episodes_dir = "episodes"
         os.makedirs(episodes_dir, exist_ok=True)
