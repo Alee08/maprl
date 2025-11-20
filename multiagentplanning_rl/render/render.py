@@ -33,7 +33,38 @@ class EnvironmentRenderer:
 
         # Calculate the image path
         self.img_path = os.path.dirname(__file__)
+        self._update_grid_size_from_content()
         self.init_pygame()
+
+    def _update_grid_size_from_content(self):
+        """Derive the drawable grid dimensions from provided map content."""
+
+        coordinates = []
+
+        for obj_key in ["plant", "coffee", "letter", "empty_cell"]:
+            coordinates.extend(self.object_positions.get(obj_key, []))
+
+        for wall_a, wall_b in self.object_positions.get("office_walls", []):
+            coordinates.extend([wall_a, wall_b])
+
+        for connector_key in ["bridges", "boats", "doors", "manager_doors"]:
+            for cell_a, cell_b in self.object_positions.get(connector_key, []):
+                coordinates.extend([cell_a, cell_b])
+
+        coordinates.extend(self.goals.values())
+
+        if coordinates:
+            inferred_width = max(x for x, _ in coordinates) + 1
+            inferred_height = max(y for _, y in coordinates) + 1
+        else:
+            inferred_width = 0
+            inferred_height = 0
+
+        fallback_width = self.grid_width * self.in_cell_size
+        fallback_height = self.grid_height * self.in_cell_size
+
+        self.total_grid_width = inferred_width or fallback_width
+        self.total_grid_height = inferred_height or fallback_height
 
     def load_resource(self, path, size):
         """Load and resize an image from memory."""
@@ -48,8 +79,8 @@ class EnvironmentRenderer:
         self.font = pygame.font.SysFont("Arial", 25)
 
         # Calculate total grid size in pixels
-        self.screen_width = self.grid_width * self.in_cell_size * self.inner_cell_size
-        self.screen_height = self.grid_height * self.in_cell_size * self.inner_cell_size
+        self.screen_width = self.total_grid_width * self.inner_cell_size
+        self.screen_height = self.total_grid_height * self.inner_cell_size
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         self.clock = pygame.time.Clock()
 
@@ -177,8 +208,8 @@ class EnvironmentRenderer:
     def render(self, episode, obs):
         self.screen.fill((255, 255, 255))
 
-        total_grid_width = self.grid_width * self.in_cell_size
-        total_grid_height = self.grid_height * self.in_cell_size
+        total_grid_width = self.total_grid_width
+        total_grid_height = self.total_grid_height
 
         # Draw the grid lines for the entire grid (including inner cells)
         for x in range(total_grid_width + 1):
@@ -214,38 +245,32 @@ class EnvironmentRenderer:
             text_rect = text_surface.get_rect(center=goal_rect.center)
             self.screen.blit(text_surface, text_rect)
 
-        # Draw the walls
+        # Draw the walls; handle walls spanning multiple cells by tiling segments
         for (cell1, cell2) in self.object_positions.get("office_walls", []):
             x1, y1 = cell1
             x2, y2 = cell2
 
             if x1 == x2:
-                # Draw horizontal wall segments along the shared column for every row between the cells
+                # Horizontal boundary: draw a wall for every step between the two rows
+                min_y, max_y = sorted((y1, y2))
                 x_start = x1 * self.inner_cell_size
                 x_end = (x1 + 1) * self.inner_cell_size
-                y_min, y_max = sorted((y1, y2))
-                for y in range(y_min, y_max):
-                    y_boundary = (y + 1) * self.inner_cell_size
+
+                for y in range(min_y + 1, max_y + 1):
+                    y_pos = y * self.inner_cell_size
                     pygame.draw.line(
-                        self.screen,
-                        (0, 0, 0),
-                        (x_start, y_boundary),
-                        (x_end, y_boundary),
-                        5,
+                        self.screen, (0, 0, 0), (x_start, y_pos), (x_end, y_pos), 5
                     )
             elif y1 == y2:
-                # Draw vertical wall segments along the shared row for every column between the cells
+                # Vertical boundary: draw a wall for every step between the two columns
+                min_x, max_x = sorted((x1, x2))
                 y_start = y1 * self.inner_cell_size
                 y_end = (y1 + 1) * self.inner_cell_size
-                x_min, x_max = sorted((x1, x2))
-                for x in range(x_min, x_max):
-                    x_boundary = (x + 1) * self.inner_cell_size
+
+                for x in range(min_x + 1, max_x + 1):
+                    x_pos = x * self.inner_cell_size
                     pygame.draw.line(
-                        self.screen,
-                        (0, 0, 0),
-                        (x_boundary, y_start),
-                        (x_boundary, y_end),
-                        5,
+                        self.screen, (0, 0, 0), (x_pos, y_start), (x_pos, y_end), 5
                     )
             else:
                 print(f"Invalid wall between {cell1} and {cell2}")
