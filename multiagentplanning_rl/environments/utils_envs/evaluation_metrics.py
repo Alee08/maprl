@@ -573,6 +573,17 @@ def test_policy_optima_MAPRL(
     )
 
 
+def _sanitize_office_world_lines(office_world):
+    """Remove comments and empty rows from a map string."""
+
+    sanitized_lines = []
+    for raw_line in office_world.strip().split("\n"):
+        line = raw_line.split("#", 1)[0].strip()
+        if line:
+            sanitized_lines.append(line)
+    return sanitized_lines
+
+
 def parse_office_world_(office_world):
     """
     Parses an office world representation into coordinates, goals, walls, rooms, and connections.
@@ -584,7 +595,7 @@ def parse_office_world_(office_world):
     # Parse the office world into a list of lists, ignoring ⛔ and 🚪
     office_lines = [
         line.replace("⛔", "").replace("🚪", "").strip().split()
-        for line in office_world.strip().split("\n")
+        for line in _sanitize_office_world_lines(office_world)
     ]
     filtered_list_of_lists = [lst for lst in office_lines if lst]
     goals = {
@@ -628,7 +639,7 @@ def parse_office_grid(office_world):
     """
 
     # Parsing the grid into a list of lists
-    grid = [line.strip().split() for line in office_world.strip().split("\n")]
+    grid = [line.strip().split() for line in _sanitize_office_world_lines(office_world)]
     return grid
 
 

@@ -1811,13 +1811,11 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
         else:
             exploration = True  # Usa la policy con esplorazione
 
-        record_episode = episode % 10000 == 0  # and episode != 0
+        record_episode = episode % 10000 == 0 and episode != 0
         # record_episode = False
         if record_episode:
             renderer.render(episode, states)  # Cattura frame durante l'episodio
             actions_log = {agent.name: [] for agent in env.agents}
-            renderer.save_episode(episode)
-            breakpoint()
 
         while any(rm_env.env.active_agents.values()):
             total_training_steps += 1
