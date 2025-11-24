@@ -56,12 +56,6 @@ logging.basicConfig(level=logging.INFO)
 NUM_EPISODES = 20000  # Numero di partite da giocare per l'apprendimento
 # wandb.init(project="maze_RL_new", entity="alee8", mode="disabled")
 
-map_maze = """
- 🟩 🟩 🟩 🟩 
- 🟩 🟩 🟩 🟩 
- 🟩 🟩 🟩 🟩
- 1  🟩 🟩 🟩
- """
 map_3 = """
  D  🟩 🟩 ⛔ 🟩 🥤 🪴 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🪴 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🟩 🥤
  🟩 🟩 🟩 🚪 🟩 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🪴 🪴 🟩 ⛔ 🟩 🪴 🪴
@@ -95,56 +89,15 @@ map_3 = """
  🟩 A  🟩 ⛔ 🪴 🪴 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🟩 🪴 
  🪴 🟩 🟩 ⛔ 🟩 🟩 🥤 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 C  ⛔ 🪴 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🪴 ✉️ 🪴 
  """
-# Stai attento al fatto che le azioni sono impostate per consiederare una griglia 3x3
-map_2 = """
- B  🟩 🟩 ⛔ 🟩 🥤 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩
- 🟩 🟩 🟩 🚪 🟩 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩
- 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ O  🪴 🟩 ⛔ 🟩 🪴 🟩
- ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪
- 🟩 🟩 🟩 ⛔ ✉️ 🪴 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩
- 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🪴 🪴 🟩 🚪 🟩 🪴 🪴 ⛔ 🟩 🪴 🟩
- 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩
- ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ 🚪 ⛔
- 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🟩 🟩
- 🟩 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🟩 🟩 🟩
- 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🥤 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
- 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ 🚪 ⛔ ⛔ 
- 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
- 🟩 A  🟩 ⛔ 🪴 🪴 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🟩 🟩 🟩
- 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 C  ⛔ 🟩 🟩 🟩
- 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ 🚪 ⛔ ⛔ 
- 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
- 🟩 A  🟩 ⛔ 🪴 🪴 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🟩 🟩 🟩
- 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 C  ⛔ 🟩 🟩 🟩
- """
-map_1 = """
- B  🟩 🟩 ⛔ 🟩 🥤 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
- 🟩 🟩 🟩 🚪 🟩 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🟩 🟩
- 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ O  🪴 🟩
- ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 
- 🟩 🟩 🟩 ⛔ ✉️ 🪴 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
- 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🪴 🪴 🟩 🚪 🟩 🪴 🪴
- 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
- ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪
- 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩
- 🟩 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩
- 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🥤 🟩 🟩 ⛔ 🟩 🟩 🟩
- 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔
- 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
- 🟩 A  🟩 ⛔ 🪴 🪴 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩
- 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 C 
- """
+
 # walls, goals = parse_map_emoji(map_maze)
 # coordinates, goals, office_walls = parse_office_world(map_1)
-MAP = map_3
-if MAP == map_3:
-    grid_height = 8
-    grid_width = 8
-    grid_size = 8
-elif MAP == MAP_1:
-    grid_height = 4
-    grid_width = 4
-    grid_size = 4
+MAPS = {"large": map_3, "small": map_1}
+MAP_SELECTION = "large"
+MAP = MAPS[MAP_SELECTION]
+
+GRID_DIMENSIONS = {"large": (8, 8, 8), "small": (4, 4, 4)}
+grid_height, grid_width, grid_size = GRID_DIMENSIONS[MAP_SELECTION]
 # Parse the map
 coordinates_obj, goals, walls, rooms, _connections = parse_office_world_(MAP)
 
@@ -155,14 +108,26 @@ print("Walls:", walls)
 print("Rooms:", rooms)
 print("connections:", _connections)
 
-object_positions = {
-    "plant": coordinates_obj["plant"],
-    "coffee": coordinates_obj["coffee"],
-    "letter": coordinates_obj["letter"],
-    "office_walls": walls,
-    "bridges": [],
-    "boats": [],
-}
+
+def build_object_positions(coordinates, walls, extra=None):
+    base_positions = {
+        "plant": coordinates["plant"],
+        "coffee": coordinates["coffee"],
+        "letter": coordinates["letter"],
+        "office_walls": walls,
+    }
+
+    if extra:
+        base_positions.update(extra)
+
+    return base_positions
+
+
+object_positions = build_object_positions(
+    coordinates_obj,
+    walls,
+    extra={"bridges": [], "boats": []},
+)
 
 
 def find_connector_between_rooms(room_a, room_b, walls_set):
