@@ -2,14 +2,11 @@ from multiagent_rlrm.learning_algorithms.qlearning import QLearning
 from multiagentplanning_rl.multi_agent.reward_machine import RewardMachine
 from unified_planning.shortcuts import *
 from unified_planning.model.multi_agent import *
-from collections import namedtuple
-from unified_planning.io.ma_pddl_writer import MAPDDLWriter
 from multiagent_rlrm.multi_agent.agent_rl import AgentRL
 from multiagentplanning_rl.utils.ma_sequential_simulator import (
     UPSequentialSimulatorMA as SequentialSimulatorMA,
 )
 from multiagentplanning_rl.environments.utils_envs.evaluation_metrics import *
-import cProfile
 import json
 from building_RM import RM_dict, RM_dict_true, RM_dict_true_seq
 from multiagentplanning_rl.utils.message import Message
@@ -69,6 +66,7 @@ print("connections:", _connections)
 
 
 def build_object_positions(coordinates, walls, extra=None):
+    """Assembles base object positions and optionally merges additional items."""
     base_positions = {
         "plant": coordinates["plant"],
         "coffee": coordinates["coffee"],
@@ -960,6 +958,7 @@ transitions_ag1_ag3_ag4_exp0 = {
 }
 # Funzione principale per eseguire l'esperimento
 def initialize_reward_machines(experiment):
+    """Create and configure Reward Machines and detectors for each agent."""
     rm_event_pairs = {}
     for agent_label, agent in AGENT_ORDER:
         transitions = RM_dict_true_seq[agent_label]
@@ -996,6 +995,7 @@ def initialize_reward_machines(experiment):
 
 # Funzione principale per eseguire l'esperimento
 def run_experiment(num_episodes, wandb_enabled, experiment):
+    """Run a training session for the selected experiment variant."""
     reward_machines = initialize_reward_machines(experiment)
     if wandb_enabled:
         wandb.init(project="maze_RL_new", entity="alee8", mode="online")
@@ -1224,6 +1224,7 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
 
 # Imposta argparse per gestire la linea di comando
 def parse_args():
+    """Parse command-line options for experiment selection and logging."""
     parser = argparse.ArgumentParser(
         description="Lancia esperimenti multi-agente su maze RL"
     )

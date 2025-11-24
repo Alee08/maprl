@@ -6,7 +6,7 @@ from multiagent_rlrm.multi_agent.agent_rl import AgentRL
 from multiagent_rlrm.multi_agent.wrappers.rm_environment_wrapper import (
     RMEnvironmentWrapper,
 )
-from multiagentplanning_rl.environments.integration_planing_and_learning.state_encoder_maze_office import (
+from multiagentplanning_rl.environments.integration_planing_and_learning.state_encoder import (
     StateEncoderMAPRL,
 )
 import numpy as np

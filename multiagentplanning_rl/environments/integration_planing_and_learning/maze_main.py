@@ -1,26 +1,17 @@
 import functools
 import random
 import copy
-import numpy as np
-from gymnasium.spaces import Discrete, MultiDiscrete
 import pygame
-from time import *
-from pettingzoo import ParallelEnv
 from multiagent_rlrm.learning_algorithms.qlearning import QLearning
 from multiagentplanning_rl.multi_agent.reward_machine import RewardMachine
 from unified_planning.shortcuts import *
 from unified_planning.model.multi_agent import *
-from collections import namedtuple
-from unified_planning.io.ma_pddl_writer import MAPDDLWriter
 from multiagentplanning_rl.multi_agent.agent_rl import AgentRL
-import cv2
 from multiagentplanning_rl.utils.ma_sequential_simulator import (
     UPSequentialSimulatorMA as SequentialSimulatorMA,
 )
 from multiagentplanning_rl.environments.utils_envs.evaluation_metrics import *
-import cProfile
 import json
-import pickle
 from multiagentplanning_rl.utils.message import Message
 from ma_maze_office import MAP_RL_Env
 from multiagentplanning_rl.render.render import EnvironmentRenderer
@@ -34,7 +25,6 @@ from multiagentplanning_rl.multi_agent.wrappers.rm_environment_wrapper import (
     RMEnvironmentWrapper,
 )
 import wandb
-from pettingzoo.test import parallel_api_test
 import random
 from multiagentplanning_rl.utils.utils import (
     encode_state,
@@ -43,21 +33,17 @@ from multiagentplanning_rl.utils.utils import (
     parse_office_world,
 )
 
-# from heatmap import generate_heatmaps
-# from multiagentplanning_rl.render.heatmap import generate_heatmaps
-import string
-from multiagentplanning_rl.multi_agent.action_rl import ActionRL
 import logging
 import argparse
 
 logging.basicConfig(level=logging.INFO)
 
 
-NUM_EPISODES = 20000  # Numero di partite da giocare per l'apprendimento
+NUM_EPISODES = 20000  # Number of episodes
 # wandb.init(project="maze_RL_new", entity="alee8", mode="disabled")
 
 
-# Stai attento al fatto che le azioni sono impostate per consiederare una griglia 3x3
+# Be aware that the actions are set to consider a 3x3 rooms
 map_2 = """
  🪴 🪴 B  ⛔ 🟩 🥤 🟩 ⛔ 🪴 🟩 🪴 ⛔ 🟩 🪴 🪴 ⛔ D  🪴 ✉️
  🪴 🟩 🟩 🚪 🟩 🪴 🪴 🚪 🟩 🪴 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩
@@ -80,8 +66,6 @@ map_2 = """
  🪴 🪴 🪴 ⛔ 🥤 🟩 🟩 ⛔ 🪴 🟩 🪴 ⛔ 🪴 🟩 B  ⛔ 🟩 🪴 🪴
  """
 
-# walls, goals = parse_map_emoji(map_maze)
-# coordinates, goals, office_walls = parse_office_world(map_1)
 MAPS = {"large": map_3, "medium": map_2, "small": map_1}
 MAP_SELECTION = "medium"
 MAP = MAPS[MAP_SELECTION]
@@ -92,14 +76,8 @@ grid_height, grid_width, grid_size = GRID_DIMENSIONS[MAP_SELECTION]
 coordinates_obj, goals, walls, rooms, _connections = parse_office_world_(MAP)
 
 
-print("Coordinates:", coordinates_obj)
-print("Goals:", goals)
-print("Walls:", walls)
-print("Rooms:", rooms)
-print("connections:", _connections)
-
-
 def build_object_positions(coordinates, walls, extra=None):
+    """Create default object locations and merge optional extra positions."""
     base_positions = {
         "plant": coordinates["plant"],
         "coffee": coordinates["coffee"],
@@ -133,8 +111,8 @@ renderer = EnvironmentRenderer(
     agents=env.agents,
     object_positions=object_positions,
     goals=goals,
-    cell_size=100,  # Dimensione in pixel di una stanza
-    in_cell_size=env.cell_size,  # Numero di sottocelle per dimensione all'interno della stanza
+    cell_size=100,  # Dimension in pixel of a room
+    in_cell_size=env.cell_size,  # Number of subcells per dimension within the room
     resource_overrides={
         "plant": lambda renderer: (
             "img/buco_lab.png",
@@ -284,24 +262,24 @@ def create_cell_connections(connections, env):
     Location = UserType("Location")
     location_objects = {}
 
-    # Crea gli oggetti per ogni stanza
+    # Create objects for each room
     for room_name in connections:
         location_objects[room_name] = Object(room_name, Location)
 
-    # Crea il fluente is_connected
+    # Create the fluent is_connected
     is_connected = Fluent("is_connected", BoolType(), l1=Location, l2=Location)
 
-    # Imposta le connessioni
+    # Set up connections
     for room_name, connected_rooms in connections.items():
         for connected_room in connected_rooms:
-            # Imposta il valore iniziale della connessione
+            # Set the initial value of the connection
             env.set_initial_value(
                 is_connected(
                     location_objects[room_name], location_objects[connected_room]
                 ),
                 True,
             )
-            # Facciamo la connessione bidirezionale
+            # Let's make the two-way connection
             env.set_initial_value(
                 is_connected(
                     location_objects[connected_room], location_objects[room_name]
@@ -323,26 +301,26 @@ def create_wall_connections(walls, env):
     Location = UserType("Location")
     location_objects = {}
 
-    # Crea gli oggetti per ogni coordinata
+    # Create objects for each coordinate
     for wall_pair in walls:
         for coord in wall_pair:
             coord_name = f"({coord[0]},{coord[1]})"
             if coord_name not in location_objects:
                 location_objects[coord_name] = Object(coord_name, Location)
 
-    # Crea il fluente is_wall
+    # Create the fluent is_wall
     is_wall = Fluent("is_wall", BoolType(), l1=Location, l2=Location)
 
-    # Imposta i muri
+    # Set the walls
     for wall_pair in walls:
         coord1_name = f"({wall_pair[0][0]},{wall_pair[0][1]})"
         coord2_name = f"({wall_pair[1][0]},{wall_pair[1][1]})"
-        # Imposta il valore iniziale per indicare la presenza di un muro
+        # Set the initial value to indicate the presence of a wall
         env.set_initial_value(
             is_wall(location_objects[coord1_name], location_objects[coord2_name]),
             True,
         )
-        # Facciamo il muro bidirezionale
+        # Let's make the two-way wall
         env.set_initial_value(
             is_wall(location_objects[coord2_name], location_objects[coord1_name]),
             True,
@@ -417,7 +395,7 @@ def test_policy(rm_env, episode, play=False):
                 f"[{episode}] Test success rate: {success_rate_per_agente} - avg timesteps {average_timesteps} - avg reward {avg_reward_per_agente} - avg arps {avg_arps_per_agente}"
             )
 
-    # Se non siamo in modalità play, logghiamo i dati su wandb
+    # If we are not in play mode, we log data to wandb
     if not play:
         for ag_name, arps in avg_arps_per_agente.items():
             log_data[f"avg_arps_{ag_name}"] = arps
@@ -442,15 +420,15 @@ def initialize_experiment_metrics(agents):
     :param agents: List of agents in the environment
     :return: Initialized dictionaries for tracking metrics
     """
-    successi_per_agente = {agent.name: 0 for agent in agents}
-    ricompense_per_episodio = {agent.name: [] for agent in agents}
+    success_per_agent = {agent.name: 0 for agent in agents}
+    rewards_per_episode = {agent.name: [] for agent in agents}
     actions_log = {agent.name: [] for agent in agents}
-    finestra_media_mobile = 1000
+    moving_average_window = 1000
     return (
-        successi_per_agente,
-        ricompense_per_episodio,
+        success_per_agent,
+        rewards_per_episode,
         actions_log,
-        finestra_media_mobile,
+        moving_average_window,
     )
 
 
@@ -458,9 +436,9 @@ def log_wandb_data(
     rm_env,
     episode,
     rewards_agents,
-    successi_per_agente,
-    ricompense_per_episodio,
-    finestra_media_mobile,
+    success_per_agent,
+    rewards_per_episode,
+    moving_average_window,
     total_step,
     training_steps,
 ):
@@ -470,18 +448,18 @@ def log_wandb_data(
     :param rm_env: The Reward Machine environment instance
     :param episode: The current episode number
     :param rewards_agents: Rewards obtained by each agent
-    :param successi_per_agente: Success count per agent
-    :param ricompense_per_episodio: Rewards per episode
-    :param finestra_media_mobile: Moving average window size
+    :param success_per_agent: Success count per agent
+    :param rewards_per_episode: Rewards per episode
+    :param moving_average_window: Moving average window size
     :param total_step: Total steps taken in the current run
     """
     log_data = prepare_log_data(
         rm_env.env,
         episode,
         rewards_agents,
-        successi_per_agente,
-        ricompense_per_episodio,
-        finestra_media_mobile,
+        success_per_agent,
+        rewards_per_episode,
+        moving_average_window,
     )
     log_data.update(
         {
@@ -492,8 +470,6 @@ def log_wandb_data(
 
     wandb.log(log_data, step=episode)
 
-
-# Example usage with a 4x4 grid (rooms)
 
 locations, coordinates = generate_grid_locations_and_coordinates(grid_size)
 env.add_objects(locations)
@@ -644,41 +620,10 @@ env.set_initial_value(Dot(a8, pos_i), 2)  # 83
 env.set_initial_value(Dot(a8, pos_j), 2)
 # a5.set_initial_position_i_j(0, 0)
 
-"""a9.add_public_fluent(pos_x)
-a9.add_public_fluent(pos_y)
-a9.add_public_fluent(pos, default_initial_value=False)
-a9.add_state_encoder(StateEncoderMAPRL(a9))
-a9.add_public_fluent(pos_i)
-a9.add_public_fluent(pos_j)
-env.add_agent(a9)
-env.set_initial_value(Dot(a9, pos_x), 7)  # 98
-env.set_initial_value(Dot(a9, pos_y), 3)
-env.set_initial_value(Dot(a9, pos_i), 0)  # 83
-env.set_initial_value(Dot(a9, pos_j), 0)
-# a5.set_initial_position_i_j(0, 0)
-
-a10.add_public_fluent(pos_x)
-a10.add_public_fluent(pos_y)
-a10.add_public_fluent(pos, default_initial_value=False)
-a10.add_state_encoder(StateEncoderMAPRL(a10))
-a10.add_public_fluent(pos_i)
-a10.add_public_fluent(pos_j)
-env.add_agent(a10)
-env.set_initial_value(Dot(a10, pos_x), 4)  # 98
-env.set_initial_value(Dot(a10, pos_y), 7)
-env.set_initial_value(Dot(a10, pos_i), 0)  # 83
-env.set_initial_value(Dot(a10, pos_j), 0)
-# a5.set_initial_position_i_j(0, 0)"""
-
 env.initialize_location_mapping(coordinates)
 
 
 connections = []
-
-
-# Utilizzo della funzione create_wall_connections
-
-
 is_connected = create_cell_connections(_connections, env)
 is_wall = create_wall_connections(walls, env)
 
@@ -698,55 +643,42 @@ env.ma_environment.add_fluent(has_bridge, default_initial_value=False)
 env.ma_environment.add_fluent(has_boat, default_initial_value=False)
 
 
-# Setto i ponti
-# Lista dei nomi desiderati
-# Crea un dizionario di tutte le location:
+# Create a dictionary of all locations:
 loc_map = {loc.name: loc for loc in locations}
 
-# Ora accedi in modo esplicito ai singoli oggetti:
+
 l45 = loc_map["l45"]
-# l78 = loc_map["l78"]
-# l88 = loc_map["l88"]
-# l86 = loc_map["l86"]
-# l87 = loc_map["l87"]
-# l66 = loc_map["l66"]
-# l67 = loc_map["l67"]
-# l72 = loc_map["l72"]
-# l73 = loc_map["l73"]
-# l17 = loc_map["l17"]
-# l18 = loc_map["l18"]
-# l28 = loc_map["l28"]
 
 
 # Setto i ponti
-env.set_initial_value(has_bridge(l13, l14), True)  # TODO attenzione qui
-env.set_initial_value(has_bridge(l14, l13), True)  # TODO attenzione qui
+env.set_initial_value(has_bridge(l13, l14), True)
+env.set_initial_value(has_bridge(l14, l13), True)
 env.set_initial_value(is_connected(l13, l14), False)
 env.set_initial_value(is_connected(l14, l13), False)
 
-env.set_initial_value(has_boat(l14, l24), True)  # TODO attenzione qui
-env.set_initial_value(has_boat(l24, l14), True)  # TODO attenzione qui
+env.set_initial_value(has_boat(l14, l24), True)
+env.set_initial_value(has_boat(l24, l14), True)
 env.set_initial_value(is_connected(l14, l24), False)
 env.set_initial_value(is_connected(l24, l14), False)
 
 # TODO MAZE
-env.set_initial_value(has_bridge(l31, l41), True)  # TODO attenzione qui
-env.set_initial_value(has_bridge(l41, l31), True)  # TODO attenzione qui
+env.set_initial_value(has_bridge(l31, l41), True)
+env.set_initial_value(has_bridge(l41, l31), True)
 env.set_initial_value(is_connected(l31, l41), False)
 env.set_initial_value(is_connected(l41, l31), False)
 
-env.set_initial_value(has_boat(l41, l42), True)  # TODO attenzione qui
-env.set_initial_value(has_boat(l42, l41), True)  # TODO attenzione qui
+env.set_initial_value(has_boat(l41, l42), True)
+env.set_initial_value(has_boat(l42, l41), True)
 env.set_initial_value(is_connected(l41, l42), False)
 env.set_initial_value(is_connected(l42, l41), False)
 
-env.set_initial_value(has_bridge(l25, l35), True)  # TODO attenzione qui
-env.set_initial_value(has_bridge(l35, l25), True)  # TODO attenzione qui
+env.set_initial_value(has_bridge(l25, l35), True)
+env.set_initial_value(has_bridge(l35, l25), True)
 env.set_initial_value(is_connected(l25, l35), False)
 env.set_initial_value(is_connected(l35, l25), False)
 
-env.set_initial_value(has_bridge(l35, l45), True)  # TODO attenzione qui
-env.set_initial_value(has_bridge(l45, l35), True)  # TODO attenzione qui
+env.set_initial_value(has_bridge(l35, l45), True)
+env.set_initial_value(has_bridge(l45, l35), True)
 env.set_initial_value(is_connected(l35, l45), False)
 env.set_initial_value(is_connected(l45, l35), False)
 
@@ -756,43 +688,7 @@ boat_pairs = {("l14", "l24"), ("l41", "l42")}
 
 renderer.object_positions["bridges"] = build_connectors(bridge_pairs, rooms, walls)
 renderer.object_positions["boats"] = build_connectors(boat_pairs, rooms, walls)
-# breakpoint()
 
-# l17, l18, l28
-"""env.set_initial_value(has_bridge(l78, l88), True) #TODO attenzione qui
-env.set_initial_value(has_bridge(l88, l78), True) #TODO attenzione qui
-env.set_initial_value(is_connected(l78, l88), False)
-env.set_initial_value(is_connected(l88, l78), False)
-
-env.set_initial_value(has_boat(l86, l87), True) #TODO attenzione qui
-env.set_initial_value(has_boat(l87, l86), True) #TODO attenzione qui
-env.set_initial_value(is_connected(l86, l87), False)
-env.set_initial_value(is_connected(l87, l86), False)
-
-env.set_initial_value(has_bridge(l66, l67), True) #TODO attenzione qui
-env.set_initial_value(has_bridge(l67, l66), True) #TODO attenzione qui
-env.set_initial_value(is_connected(l66, l67), False)
-env.set_initial_value(is_connected(l67, l66), False)
-
-env.set_initial_value(has_bridge(l72, l73), True) #TODO attenzione qui 6 agenti
-env.set_initial_value(has_bridge(l73, l72), True) #TODO attenzione qui 6 agenti
-env.set_initial_value(is_connected(l72, l73), False)
-env.set_initial_value(is_connected(l73, l72), False)
-
-env.set_initial_value(has_boat(l17, l18), True) #TODO attenzione qui 2 agenti
-env.set_initial_value(has_boat(l18, l17), True) #TODO attenzione qui 2 agenti
-env.set_initial_value(is_connected(l17, l18), False)
-env.set_initial_value(is_connected(l18, l17), False)
-
-env.set_initial_value(has_boat(l28, l18), True) #TODO attenzione qui 2 agenti
-env.set_initial_value(has_boat(l18, l28), True) #TODO attenzione qui 2 agenti
-env.set_initial_value(is_connected(l18, l28), False)
-env.set_initial_value(is_connected(l28, l18), False)"""
-
-
-# 10x10 griglia:
-# env.set_initial_value(is_connected(l14, l15), False)
-# env.set_initial_value(is_connected(l15, l14), False)
 
 env.ma_environment.add_fluent(is_connected, default_initial_value=False)
 # Azione move_down
@@ -834,7 +730,7 @@ move_down.add_effect(pos(l_to), True)
 move_down.add_effect(pos(l_from), False)
 move_down.add_effect(pos_j, 0)
 
-# move_up.add_effect(pos_y, Plus(pos_y, 1))  # Effetto: incrementa pos_y di 1
+# move_up.add_effect(pos_y, Plus(pos_y, 1))
 a1.add_rl_action(move_down)
 a2.add_rl_action(move_down)
 a3.add_rl_action(move_down)
@@ -883,7 +779,7 @@ move_right.add_effect(pos(l_from), False)
 move_right.add_effect(pos_i, 0)
 move_right.add_increase_effect(pos_x, 1)
 
-# move_right.add_effect(pos_x, Plus(pos_x, 1))  # Effetto: incrementa pos_x di 1
+# move_right.add_effect(pos_x, Plus(pos_x, 1))
 a1.add_rl_action(move_right)
 a2.add_rl_action(move_right)
 a3.add_rl_action(move_right)
@@ -898,22 +794,22 @@ a8.add_rl_action(move_right)
 
 
 low_up = InstantaneousAction("low_up", l_from=Location, l_to=Location)
-# low_up.add_precondition(Not(is_wall(l_from, l_to)))  # precondizione: non deve esserci un muro
+# low_up.add_precondition(Not(is_wall(l_from, l_to)))  # precondition: there must be no wall
 low_up.add_precondition(LT(0, pos_j))  # right > left
 low_up.add_decrease_effect(pos_j, 1)
 
 low_down = InstantaneousAction("low_down", l_from=Location, l_to=Location)
-# low_down.add_precondition(Not(is_wall(l_from, l_to)))  # precondizione: non deve esserci un muro
+# low_down.add_precondition(Not(is_wall(l_from, l_to)))  # precondition: there must be no wall
 low_down.add_precondition(LT(pos_j, env.cell_size - 1))
 low_down.add_increase_effect(pos_j, 1)
 
 low_left = InstantaneousAction("low_left", l_from=Location, l_to=Location)
-# low_left.add_precondition(Not(is_wall(l_from, l_to)))  # precondizione: non deve esserci un muro
+# low_left.add_precondition(Not(is_wall(l_from, l_to)))  # precondition: there must be no wall
 low_left.add_precondition(LT(0, pos_i))
 low_left.add_decrease_effect(pos_i, 1)
 
 low_right = InstantaneousAction("low_right", l_from=Location, l_to=Location)
-# low_right.add_precondition(Not(is_wall(l_from, l_to)))  # precondizione: non deve esserci un muro
+# low_right.add_precondition(Not(is_wall(l_from, l_to)))  # precondition: there must be no wall
 low_right.add_precondition(LT(pos_i, env.cell_size - 1))
 low_right.add_increase_effect(pos_i, 1)
 
@@ -1115,34 +1011,6 @@ a8.add_rl_action(row_down)
 a8.add_rl_action(row_right)
 a8.add_rl_action(row_left)"""
 
-"""a9.add_rl_action(low_up)
-a9.add_rl_action(low_down)
-a9.add_rl_action(low_left)
-a9.add_rl_action(low_right)
-a9.add_rl_action(cross_up)
-a9.add_rl_action(cross_down)
-a9.add_rl_action(cross_right)
-a9.add_rl_action(cross_left)
-a9.add_rl_action(wait)
-a9.add_rl_action(row_up)
-a9.add_rl_action(row_down)
-a9.add_rl_action(row_right)
-a9.add_rl_action(row_left)
-
-a10.add_rl_action(low_up)
-a10.add_rl_action(low_down)
-a10.add_rl_action(low_left)
-a10.add_rl_action(low_right)
-#a10.add_rl_action(cross_up)
-#a10.add_rl_action(cross_down)
-#a10.add_rl_action(cross_right)
-#a10.add_rl_action(cross_left)
-a10.add_rl_action(wait)
-a10.add_rl_action(row_up)
-a10.add_rl_action(row_down)
-a10.add_rl_action(row_right)
-a10.add_rl_action(row_left)"""
-
 
 def setup_agent_rm(agent, transitions):
     """
@@ -1211,7 +1079,7 @@ a5_new_transitions_ag_5_and_ag2_exp2 = {
     ("state2", ((goals["C"], True),)): ("state3", 0),
 }
 
-# TODO IQL exp2
+# States for experiment: IQL exp2
 transitions_ag_2_exp2 = {
     ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 0),
     ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 0),
@@ -1225,7 +1093,7 @@ transitions_ag_5_exp2 = {
     ("state3", ((("pos(l14)"), True),)): ("state4", 100),
 }
 
-# TODO IQL exp1
+# States for experiment: IQL exp1
 transitions_ag_2_exp1 = {
     ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 10),
     ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 10),
@@ -1237,7 +1105,7 @@ transitions_ag_5_exp1 = {
     ("state2", ((("pos(l14)"), True),)): ("state4", 100),
 }
 
-# TODO IQL exp 0 5agents (only MAP)
+# States for experiment: IQL exp 0, 5agents (only MAP)
 transitions_ag5_ag2_exp0 = {
     ("state2", ((("pos(l14)"), True),)): ("state4", 100),
 }
@@ -1245,7 +1113,7 @@ transitions_ag1_ag3_ag4_exp0 = {
     ("state2", ((("pos(l14)"), True),)): ("state4", 100),
 }
 
-# TODO ag8 - maze exp1
+# States for experiment: ag8 - maze exp1
 exp1_transitions_ag_1 = {
     ("state2", (("pos(l13)", True),)): ("state3X", 20),
     (
@@ -1317,8 +1185,6 @@ exp1_transitions_ag_8 = {
     ): ("state4", 30),
     ("state4", (("pos(l41)", True),)): ("state5", 40),
 }
-# transitions_ag_9 = {('state1', (("pos(l13)", True),)): ('state2X', 10), ('state2X', ((('a7', "pos(l13)"), True), (('a8', "pos(l13)"), True), ("pos(l13)", True))): ('state3', 20), ('state3', (("pos(l14)", True),)): ('state4', 30)}
-# transitions_ag_10 = {('state1', (("pos(l24)", True),)): ('state1X', 10), ('state1X', ((('a6', "pos(l24)"), True), ("pos(l24)", True))): ('state2', 20), ('state2', (("pos(l14)", True),)): ('state3', 30)}
 
 
 EXP1_TRANSITIONS = {
@@ -1333,7 +1199,7 @@ EXP1_TRANSITIONS = {
 }
 
 
-# TODO exp2
+# States for experiment: exp2
 new_transitions_ag_torcia_exp2 = {
     ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 0),
     ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 0),
@@ -1354,7 +1220,7 @@ new_transitions_ag_exp2_PRE = {
     ("state10", ((coordinates_obj["letter"][0], True),)): ("state11", 0),
 }"""
 
-# TODO exp3 ag:7/8/9 cross/up_stone in B insieme agli ag:1/3/4
+# States for experiment: exp3 ag:7/8/9 cross/up_stone in B together with ag:1/3/4
 new_transitions_ag_torcia_exp3 = {
     ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 0),
     ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 0),
@@ -1463,6 +1329,7 @@ transitions_ag_8_exp3 = {
 
 
 def initialize_reward_machines(experiment):
+    """Build Reward Machines for each agent and enrich them per experiment."""
     rm_event_pairs = {}
     for agent_label, agent in AGENT_ORDER:
         base_transitions = copy.deepcopy(EXP1_TRANSITIONS[agent_label])
@@ -1524,6 +1391,7 @@ def initialize_reward_machines(experiment):
 
 # Funzione principale per eseguire l'esperimento
 def run_experiment(num_episodes, wandb_enabled, experiment):
+    """Train agents for the selected experiment while logging to WandB if enabled."""
     if wandb_enabled:
         wandb.init(project="maze_RL_new", entity="alee8", mode="online")
     else:
@@ -1688,8 +1556,8 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
     # a9.set_learning_algorithm(q_learning9)
     # a10.set_learning_algorithm(q_learning10)
 
-    successi_per_agente = {agent.name: 0 for agent in env.agents}
-    ricompense_per_episodio = {agent.name: [] for agent in env.agents}
+    success_per_agent = {agent.name: 0 for agent in env.agents}
+    rewards_per_episode = {agent.name: [] for agent in env.agents}
     actions_log = {}
     q_tables = {}
     total_step = 0
@@ -1707,14 +1575,14 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
         total_steps_per_agent = {a.name: 0 for a in rm_env.agents}
         episode_total_steps = 0
 
-        # Determina se questo è un episodio di test
+        # Determine if this is a test episode
         test_episode = episode % 100 == 0
 
-        # Imposta il flag per l'esplorazione
+        # Set the flag for exploration
         if test_episode:
-            exploration = False  # Usa la policy ottima
+            exploration = False  # Use optimal policy
         else:
-            exploration = True  # Usa la policy con esplorazione
+            exploration = True  # Use policy with exploration
 
         record_episode = episode % 1000 == 0  # and episode != 0
         # record_episode = False
@@ -1726,17 +1594,15 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
             total_training_steps += 1
             episode_total_steps += 1
             actions = {}
-            rewards = {
-                a.name: 0 for a in rm_env.agents
-            }  # Inizializza le ricompense episodiche
+            rewards = {a.name: 0 for a in rm_env.agents}
             infos = {a.name: {} for a in rm_env.agents}
             for ag in rm_env.agents:
                 if not rm_env.env.active_agents.get(ag.name, True):
-                    continue  # Salta gli agenti che erano già inattivi
+                    continue  # Skip agents that were already inactive
                 current_state = rm_env.env.get_state(ag)
                 action = ag.select_action(current_state, best=not exploration)
                 actions[ag.name] = action
-                # Log delle azioni nell'ultimo episodio
+
                 if record_episode:
                     actions_log[ag.name].append(actions[ag.name].name)
             new_states, rewards, done, truncations, infos = rm_env.step(actions)
@@ -1764,23 +1630,20 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
                 )
                 rewards_agents[agent.name] += rewards[agent.name]
 
-            # Aggiorna lo stato degli agenti dopo aver processato le ricompense
             for agent in rm_env.agents:
                 if done.get(agent.name, False):
                     rm_env.env.active_agents[agent.name] = False
 
             states = copy.deepcopy(new_states)
             if record_episode:
-                renderer.render(episode, states)  # Cattura frame durante l'episodio
+                renderer.render(episode, states)  # Capture frames during the episode
 
             if all(truncations.values() or done.values()):
                 break
 
         if record_episode:
-            renderer.save_episode(
-                episode
-            )  # Salva il video solo alla fine dell'episodio
-        # Dopo l'episodio, logga i dati se è un episodio di test
+            renderer.save_episode(episode)  # Total steps to complete the episode
+
         if test_episode and wandb_enabled:
             log_data = {
                 "total_steps_episode": episode_total_steps,  # Step totali per completare l'episodio
@@ -1799,13 +1662,14 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
         )
     wandb.finish()
 
-    # Salva il log delle azioni e le Q-table in un file JSON
+    # Save the action log and Q-tables to a JSON file
     with open("final_episode_log.json", "w") as f:
         json.dump({"actions_log": actions_log, "q_tables": q_tables}, f, indent=4)
 
 
-# Imposta argparse per gestire la linea di comando
+# Set argparse to handle the command line
 def parse_args():
+    """Define and parse command-line options for running maze experiments."""
     parser = argparse.ArgumentParser(
         description="Lancia esperimenti multi-agente su maze RL"
     )
@@ -1816,7 +1680,7 @@ def parse_args():
         help="Numero di episodi per cui eseguire l'apprendimento",
     )
     parser.add_argument(
-        "--wandb_enabled", action="store_true", help="Abilita l'invio dei log a WandB"
+        "--wandb_enabled", action="store_true", help="Enable sending logs to WandB"
     )
     parser.add_argument(
         "--experiment",
@@ -1827,11 +1691,11 @@ def parse_args():
     return parser.parse_args()
 
 
-# Lancia l'esperimento con i parametri dalla linea di comando
+# Run the experiment with parameters from the command line
 if __name__ == "__main__":
     args = parse_args()
 
-    # Esegui l'esperimento con i parametri definiti da argparse
+    # Run the experiment with the parameters defined by argparse
     run_experiment(
         num_episodes=args.num_episodes,
         wandb_enabled=args.wandb_enabled,

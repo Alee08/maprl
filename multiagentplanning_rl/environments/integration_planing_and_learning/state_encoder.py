@@ -2,6 +2,8 @@ from multiagentplanning_rl.multi_agent.state_encoder import StateEncoder
 
 
 class StateEncoderMAPRL(StateEncoder):
+    """Encodes and decodes agent positions combined with Reward Machine state."""
+
     def encode(self, state, state_rm=None):
         """
         Codifies the current state, the Reward Machine state, the timestep, and returns the necessary info.

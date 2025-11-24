@@ -1,26 +1,16 @@
-import functools
-import random
 import copy
-import numpy as np
-from gymnasium.spaces import Discrete, MultiDiscrete
+import functools
 import pygame
-from time import *
-from pettingzoo import ParallelEnv
 from multiagent_rlrm.learning_algorithms.qlearning import QLearning
 from multiagentplanning_rl.multi_agent.reward_machine import RewardMachine
 from unified_planning.shortcuts import *
 from unified_planning.model.multi_agent import *
-from collections import namedtuple
-from unified_planning.io.ma_pddl_writer import MAPDDLWriter
 from multiagentplanning_rl.multi_agent.agent_rl import AgentRL
-import cv2
 from multiagentplanning_rl.utils.ma_sequential_simulator import (
     UPSequentialSimulatorMA as SequentialSimulatorMA,
 )
 from multiagentplanning_rl.environments.utils_envs.evaluation_metrics import *
-import cProfile
 import json
-import pickle
 from multiagentplanning_rl.utils.message import Message
 from ma_maze_office import MAP_RL_Env
 from multiagentplanning_rl.render.render import EnvironmentRenderer
@@ -34,7 +24,6 @@ from multiagentplanning_rl.multi_agent.wrappers.rm_environment_wrapper import (
     RMEnvironmentWrapper,
 )
 import wandb
-from pettingzoo.test import parallel_api_test
 import random
 from multiagentplanning_rl.utils.utils import (
     encode_state,
@@ -110,6 +99,7 @@ print("connections:", _connections)
 
 
 def build_object_positions(coordinates, walls, extra=None):
+    """Compose default object positions and optionally merge custom ones."""
     base_positions = {
         "plant": coordinates["plant"],
         "coffee": coordinates["coffee"],
@@ -1484,6 +1474,7 @@ new_transitions_ag_10_exp3 = {
 
 
 def initialize_reward_machines(experiment):
+    """Configure Reward Machines for each agent and adjust per experiment settings."""
     reward_machines = {}
 
     for agent_name in AGENT_ORDER:
@@ -1552,6 +1543,7 @@ transitions_ag_10 ={("state2", ((("pos(l14)"), True),)): ("state4", 100)}
 
 # Funzione principale per eseguire l'esperimento
 def run_experiment(num_episodes, wandb_enabled, experiment):
+    """Train all agents for the chosen experiment and handle logging configuration."""
     if wandb_enabled:
         wandb.init(project="maze_RL_new", entity="alee8", mode="online")
     else:
@@ -1866,6 +1858,7 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
 
 # Imposta argparse per gestire la linea di comando
 def parse_args():
+    """Parse command-line flags for running the temple quest experiments."""
     parser = argparse.ArgumentParser(
         description="Lancia esperimenti multi-agente su maze RL"
     )
