@@ -12,7 +12,7 @@ from building_RM import RM_dict, RM_dict_true, RM_dict_true_seq
 from multiagentplanning_rl.utils.message import Message
 from ma_maze_office import MAP_RL_Env
 from multiagentplanning_rl.render.render import EnvironmentRenderer
-from multiagentplanning_rl.environments.integration_planing_and_learning.state_encoder_maze_office import (
+from multiagentplanning_rl.environments.integration_planing_and_learning.state_encoder import (
     StateEncoderMAPRL,
 )
 from multiagentplanning_rl.environments.integration_planing_and_learning.detect_event import (

@@ -15,7 +15,7 @@ import json
 from multiagentplanning_rl.utils.message import Message
 from ma_maze_office import MAP_RL_Env
 from multiagentplanning_rl.render.render import EnvironmentRenderer
-from multiagentplanning_rl.environments.integration_planing_and_learning.state_encoder_maze_office import (
+from multiagentplanning_rl.environments.integration_planing_and_learning.state_encoder import (
     StateEncoderMAPRL,
 )
 from multiagentplanning_rl.environments.integration_planing_and_learning.detect_event_2 import (
@@ -66,7 +66,7 @@ map_2 = """
  🪴 🪴 🪴 ⛔ 🥤 🟩 🟩 ⛔ 🪴 🟩 🪴 ⛔ 🪴 🟩 B  ⛔ 🟩 🪴 🪴
  """
 
-MAPS = {"large": map_3, "medium": map_2, "small": map_1}
+MAPS = {"medium": map_2}
 MAP_SELECTION = "medium"
 MAP = MAPS[MAP_SELECTION]
 
@@ -158,7 +158,6 @@ Location = UserType("Location")
 max_x_value = env.grid_width
 max_y_value = env.grid_height
 
-# prova:
 l11 = Object("l11", Location)
 l12 = Object("l12", Location)
 l13 = Object("l13", Location)
@@ -650,7 +649,7 @@ loc_map = {loc.name: loc for loc in locations}
 l45 = loc_map["l45"]
 
 
-# Setto i ponti
+# Configure bridge availability
 env.set_initial_value(has_bridge(l13, l14), True)
 env.set_initial_value(has_bridge(l14, l13), True)
 env.set_initial_value(is_connected(l13, l14), False)
@@ -661,7 +660,7 @@ env.set_initial_value(has_boat(l24, l14), True)
 env.set_initial_value(is_connected(l14, l24), False)
 env.set_initial_value(is_connected(l24, l14), False)
 
-# TODO MAZE
+# TODO: refine maze bridge and boat layout
 env.set_initial_value(has_bridge(l31, l41), True)
 env.set_initial_value(has_bridge(l41, l31), True)
 env.set_initial_value(is_connected(l31, l41), False)
@@ -691,20 +690,18 @@ renderer.object_positions["boats"] = build_connectors(boat_pairs, rooms, walls)
 
 
 env.ma_environment.add_fluent(is_connected, default_initial_value=False)
-# Azione move_down
+# Action: move up between rooms
 move_up = InstantaneousAction("up", l_from=Location, l_to=Location)
 l_from = move_up.parameter("l_from")
 l_to = move_up.parameter("l_to")
-move_up.add_precondition(LT(0, pos_y))  # Precondizione: pos_y > 0
+move_up.add_precondition(LT(0, pos_y))  # Precondition: pos_y > 0
 move_up.add_precondition(is_connected(l_from, l_to))
 move_up.add_precondition(Equals(pos_j, 0))
-# move_up.add_precondition(pos(l_from))
 move_up.add_decrease_effect(pos_y, 1)
 move_up.add_effect(pos(l_to), True)
 move_up.add_effect(pos(l_from), False)
 move_up.add_effect(pos_j, env.cell_size - 1)
 
-# move_down.add_effect(pos_y, Minus(pos_y, 1))  # Effetto: decrementa pos_y di 1
 a1.add_rl_action(move_up)
 a2.add_rl_action(move_up)
 a3.add_rl_action(move_up)
@@ -714,23 +711,19 @@ a5.add_rl_action(move_up)
 a6.add_rl_action(move_up)
 a7.add_rl_action(move_up)
 a8.add_rl_action(move_up)
-# a9.add_rl_action(move_up)
-# a10.add_rl_action(move_up)
 
-# Azione move_up
+# Action: move down between rooms
 move_down = InstantaneousAction("down", l_from=Location, l_to=Location)
 move_down.add_precondition(
     LT(pos_y, max_y_value - 1)
-)  # Precondizione: pos_y < max_y_value
+)  # Precondition: pos_y < max_y_value
 move_down.add_precondition(is_connected(l_from, l_to))
 move_down.add_precondition(Equals(pos_j, env.cell_size - 1))
-# move_down.add_precondition(pos(l_from))
 move_down.add_increase_effect(pos_y, 1)
 move_down.add_effect(pos(l_to), True)
 move_down.add_effect(pos(l_from), False)
 move_down.add_effect(pos_j, 0)
 
-# move_up.add_effect(pos_y, Plus(pos_y, 1))
 a1.add_rl_action(move_down)
 a2.add_rl_action(move_down)
 a3.add_rl_action(move_down)
@@ -740,20 +733,16 @@ a5.add_rl_action(move_down)
 a6.add_rl_action(move_down)
 a7.add_rl_action(move_down)
 a8.add_rl_action(move_down)
-# a9.add_rl_action(move_down)
-# a10.add_rl_action(move_down)
 
-# Azione move_left
+# Action: move left between rooms
 move_left = InstantaneousAction("left", l_from=Location, l_to=Location)
-move_left.add_precondition(LT(0, pos_x))  # Precondizione: pos_x > 0
+move_left.add_precondition(LT(0, pos_x))  # Precondition: pos_x > 0
 move_left.add_precondition(is_connected(l_from, l_to))
 move_left.add_precondition(Equals(pos_i, 0))
-# move_left.add_precondition(pos(l_from))
 move_left.add_effect(pos(l_to), True)
 move_left.add_effect(pos(l_from), False)
 move_left.add_effect(pos_i, env.cell_size - 1)
 move_left.add_decrease_effect(pos_x, 1)
-# move_left.add_effect(pos_x, Minus(pos_x, 1))  # Effetto: decrementa pos_x di 1
 a1.add_rl_action(move_left)
 a2.add_rl_action(move_left)
 a3.add_rl_action(move_left)
@@ -763,23 +752,19 @@ a5.add_rl_action(move_left)
 a6.add_rl_action(move_left)
 a7.add_rl_action(move_left)
 a8.add_rl_action(move_left)
-# a9.add_rl_action(move_left)
-# a10.add_rl_action(move_left)
 
-# Azione move_right
+# Action: move right between rooms
 move_right = InstantaneousAction("right", l_from=Location, l_to=Location)
 move_right.add_precondition(
     LT(pos_x, max_x_value - 1)
-)  # Precondizione: pos_x < max_x_value
+)  # Precondition: pos_x < max_x_value
 move_right.add_precondition(is_connected(l_from, l_to))
 move_right.add_precondition(Equals(pos_i, env.cell_size - 1))
-# move_right.add_precondition(pos(l_from))
 move_right.add_effect(pos(l_to), True)
 move_right.add_effect(pos(l_from), False)
 move_right.add_effect(pos_i, 0)
 move_right.add_increase_effect(pos_x, 1)
 
-# move_right.add_effect(pos_x, Plus(pos_x, 1))
 a1.add_rl_action(move_right)
 a2.add_rl_action(move_right)
 a3.add_rl_action(move_right)
@@ -789,27 +774,21 @@ a5.add_rl_action(move_right)
 a6.add_rl_action(move_right)
 a7.add_rl_action(move_right)
 a8.add_rl_action(move_right)
-# a9.add_rl_action(move_right)
-# a10.add_rl_action(move_right)
 
 
 low_up = InstantaneousAction("low_up", l_from=Location, l_to=Location)
-# low_up.add_precondition(Not(is_wall(l_from, l_to)))  # precondition: there must be no wall
 low_up.add_precondition(LT(0, pos_j))  # right > left
 low_up.add_decrease_effect(pos_j, 1)
 
 low_down = InstantaneousAction("low_down", l_from=Location, l_to=Location)
-# low_down.add_precondition(Not(is_wall(l_from, l_to)))  # precondition: there must be no wall
 low_down.add_precondition(LT(pos_j, env.cell_size - 1))
 low_down.add_increase_effect(pos_j, 1)
 
 low_left = InstantaneousAction("low_left", l_from=Location, l_to=Location)
-# low_left.add_precondition(Not(is_wall(l_from, l_to)))  # precondition: there must be no wall
 low_left.add_precondition(LT(0, pos_i))
 low_left.add_decrease_effect(pos_i, 1)
 
 low_right = InstantaneousAction("low_right", l_from=Location, l_to=Location)
-# low_right.add_precondition(Not(is_wall(l_from, l_to)))  # precondition: there must be no wall
 low_right.add_precondition(LT(pos_i, env.cell_size - 1))
 low_right.add_increase_effect(pos_i, 1)
 
@@ -821,9 +800,6 @@ cross_up.add_decrease_effect(pos_y, 1)
 cross_up.add_effect(pos_j, env.cell_size - 1)
 cross_up.add_effect(pos(l_to), True)
 cross_up.add_effect(pos(l_from), False)
-# cross_up.add_effect(has_bridge(l_from, l_to), False)
-# cross_up.add_effect(pos_x, env.get_coordinates_by_location(a1, l_to)[0], True)
-# cross_up.add_effect(pos_y, env.get_coordinates_by_location(a1, l_to)[1], True)
 
 cross_down = InstantaneousAction("cross_down", l_from=Location, l_to=Location)
 cross_down.add_precondition(LT(pos_y, max_y_value - 1))
@@ -833,7 +809,6 @@ cross_down.add_increase_effect(pos_y, 1)
 cross_down.add_effect(pos_j, 0)
 cross_down.add_effect(pos(l_to), True)
 cross_down.add_effect(pos(l_from), False)
-# cross_down.add_effect(has_bridge(l_from, l_to), False)
 
 cross_right = InstantaneousAction("cross_right", l_from=Location, l_to=Location)
 cross_right.add_precondition(LT(pos_x, max_x_value - 1))
@@ -843,7 +818,6 @@ cross_right.add_increase_effect(pos_x, 1)
 cross_right.add_effect(pos_i, 0)
 cross_right.add_effect(pos(l_to), True)
 cross_right.add_effect(pos(l_from), False)
-# cross_right.add_effect(has_bridge(l_from, l_to), False)
 
 cross_left = InstantaneousAction("cross_left", l_from=Location, l_to=Location)
 cross_left.add_precondition(LT(0, pos_x))
@@ -853,7 +827,6 @@ cross_left.add_decrease_effect(pos_x, 1)
 cross_left.add_effect(pos_i, env.cell_size - 1)
 cross_left.add_effect(pos(l_to), True)
 cross_left.add_effect(pos(l_from), False)
-# cross_left.add_effect(has_bridge(l_from, l_to), False)
 
 wait = InstantaneousAction("wait", l_from=Location, l_to=Location)
 wait.add_decrease_effect(pos_x, 0)
@@ -864,7 +837,6 @@ row_up.add_precondition(has_boat(l_from, l_to))
 row_up.add_effect(pos_i, env.cell_size - 1)
 row_up.add_decrease_effect(pos_y, 1)
 row_up.add_effect(pos_j, env.cell_size - 1)
-# row_up.add_effect(has_boat(l_from, l_to), False)
 row_up.add_effect(pos(l_to), True)
 row_up.add_effect(pos(l_from), False)
 
@@ -875,7 +847,6 @@ row_down.add_precondition(has_boat(l_from, l_to))
 row_down.add_precondition(Equals(pos_j, env.cell_size - 1))
 row_down.add_increase_effect(pos_y, 1)
 row_down.add_effect(pos_j, 0)
-# row_down.add_effect(has_boat(l_from, l_to), False)
 row_down.add_effect(pos(l_to), True)
 row_down.add_effect(pos(l_from), False)
 
@@ -885,7 +856,6 @@ row_right.add_precondition(has_boat(l_from, l_to))
 row_right.add_precondition(Equals(pos_i, env.cell_size - 1))
 row_right.add_increase_effect(pos_x, 1)
 row_right.add_effect(pos_i, 0)
-# row_right.add_effect(has_boat(l_from, l_to), False)
 row_right.add_effect(pos(l_to), True)
 row_right.add_effect(pos(l_from), False)
 
@@ -895,7 +865,6 @@ row_left.add_precondition(has_boat(l_from, l_to))
 row_left.add_precondition(Equals(pos_i, 0))
 row_left.add_decrease_effect(pos_x, 1)
 row_left.add_effect(pos_i, env.cell_size - 1)
-# row_right.add_effect(has_boat(l_from, l_to), False)
 row_left.add_effect(pos(l_to), True)
 row_left.add_effect(pos(l_from), False)
 
@@ -908,19 +877,11 @@ a1.add_rl_action(cross_down)
 a1.add_rl_action(cross_right)
 a1.add_rl_action(cross_left)
 a1.add_rl_action(wait)
-"""a1.add_rl_action(row_up)
-a1.add_rl_action(row_down)
-a1.add_rl_action(row_right)
-a1.add_rl_action(row_left)"""
 
 a2.add_rl_action(low_up)
 a2.add_rl_action(low_down)
 a2.add_rl_action(low_left)
 a2.add_rl_action(low_right)
-"""a2.add_rl_action(cross_up)
-a2.add_rl_action(cross_down)
-a2.add_rl_action(cross_right)
-a2.add_rl_action(cross_left)"""
 a2.add_rl_action(wait)
 a2.add_rl_action(row_up)
 a2.add_rl_action(row_down)
@@ -936,10 +897,6 @@ a3.add_rl_action(cross_down)
 a3.add_rl_action(cross_right)
 a3.add_rl_action(cross_left)
 a3.add_rl_action(wait)
-"""a3.add_rl_action(row_up)
-a3.add_rl_action(row_down)
-a3.add_rl_action(row_right)
-a3.add_rl_action(row_left)"""
 
 a4.add_rl_action(low_up)
 a4.add_rl_action(low_down)
@@ -950,19 +907,11 @@ a4.add_rl_action(cross_down)
 a4.add_rl_action(cross_right)
 a4.add_rl_action(cross_left)
 a4.add_rl_action(wait)
-"""a4.add_rl_action(row_up)
-a4.add_rl_action(row_down)
-a4.add_rl_action(row_right)
-a4.add_rl_action(row_left)"""
 
 a5.add_rl_action(low_up)
 a5.add_rl_action(low_down)
 a5.add_rl_action(low_left)
 a5.add_rl_action(low_right)
-"""a5.add_rl_action(cross_up)
-a5.add_rl_action(cross_down)
-a5.add_rl_action(cross_right)
-a5.add_rl_action(cross_left)"""
 a5.add_rl_action(wait)
 a5.add_rl_action(row_up)
 a5.add_rl_action(row_down)
@@ -1584,11 +1533,10 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
         else:
             exploration = True  # Use policy with exploration
 
-        record_episode = episode % 1000 == 0  # and episode != 0
-        # record_episode = False
+        record_episode = episode % 1000 == 0 and episode != 0
         if record_episode:
-            renderer.render(episode, states)  # Cattura frame durante l'episodio
-            actions_log = {agent.name: [] for agent in env.agents}
+            renderer.render(episode, states)  # Capture frames during the episode
+        actions_log = {agent.name: [] for agent in env.agents}
 
         while any(rm_env.env.active_agents.values()):
             total_training_steps += 1
@@ -1615,9 +1563,9 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
                     not rm_env.env.active_agents[agent.name]
                     and not agent_just_terminated
                 ):
-                    continue  # Salta gli agenti inattivi che non hanno appena terminato
+                    continue  # Skip inactive agents that have not just terminated
 
-                # Aggiorna il conteggio dei passi per agente
+                # Update the step count for each agent
                 total_steps_per_agent[agent.name] += 1
 
                 agent.update_policy(
@@ -1646,7 +1594,7 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
 
         if test_episode and wandb_enabled:
             log_data = {
-                "total_steps_episode": episode_total_steps,  # Step totali per completare l'episodio
+                "total_steps_episode": episode_total_steps,  # Total steps to complete the episode
                 "training_steps": total_training_steps,
             }
             log_test_episode_data(
@@ -1658,7 +1606,7 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
         epsilon_str = get_epsilon_summary(rm_env.agents)
 
         logging.info(
-            f"Episodio {episode + 1}: Ricompensa = {rewards_agents}, Total Steps: {total_step + 1}, Episode Step: {rm_env.env.timestep}, Agents Step = {rm_env.env.agent_steps}, Epsilon agents= [{epsilon_str}]"
+            f"Episode {episode + 1}: Reward = {rewards_agents}, Total Steps: {total_step + 1}, Episode Step: {rm_env.env.timestep}, Agents Step = {rm_env.env.agent_steps}, Epsilon agents= [{epsilon_str}]"
         )
     wandb.finish()
 
@@ -1671,13 +1619,13 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
 def parse_args():
     """Define and parse command-line options for running maze experiments."""
     parser = argparse.ArgumentParser(
-        description="Lancia esperimenti multi-agente su maze RL"
+        description="Run multi-agent experiments on the maze RL environment"
     )
     parser.add_argument(
         "--num_episodes",
         type=int,
         default=20000,
-        help="Numero di episodi per cui eseguire l'apprendimento",
+        help="Number of episodes to run the learning loop",
     )
     parser.add_argument(
         "--wandb_enabled", action="store_true", help="Enable sending logs to WandB"
@@ -1686,7 +1634,7 @@ def parse_args():
         "--experiment",
         choices=["exp1", "exp2", "exp3"],
         default="exp1",
-        help="Seleziona il task da eseguire",
+        help="Select which task to execute",
     )
     return parser.parse_args()
 
