@@ -12,7 +12,7 @@ from multiagentplanning_rl.utils.ma_sequential_simulator import (
 from multiagentplanning_rl.environments.utils_envs.evaluation_metrics import *
 import json
 from multiagentplanning_rl.utils.message import Message
-from ma_maze_office import MAP_RL_Env
+from ma_environment import MAP_RL_Env
 from multiagentplanning_rl.render.render import EnvironmentRenderer
 from multiagentplanning_rl.environments.integration_planing_and_learning.state_encoder import (
     StateEncoderMAPRL,

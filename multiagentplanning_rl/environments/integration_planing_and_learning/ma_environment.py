@@ -1,4 +1,3 @@
-# from algo_rl import RL_algorithms
 from multiagent_rlrm.learning_algorithms.qlearning import QLearning
 from multiagentplanning_rl.multi_agent.reward_machine import RewardMachine
 
@@ -30,37 +29,16 @@ class MAP_RL_Env(BaseEnvironment):
     def __init__(self, width, height, walls, plant, cell_size):
 
         super().__init__(width, height)
-        self.walls = walls  # Inserisci le coordinate dei muri qui
-        self.grid_width = width  # 10 celle di larghezza
-        self.grid_height = height  #  10 celle di altezza
+        self.walls = walls
+        self.grid_width = width
+        self.grid_height = height
         self.cell_size = cell_size
-        # Reimposta epsilon all'inizio di ogni episodio
         self.rewards = 0
         self.current_state = None
-        self.position_A = (3, 1)
-        self.position_B = (8, 9)
-        self.position_C = (4, 7)
-        self.position_D = (8, 1)
-        self.position_E = (7, 5)
-        self.position_F = (1, 8)
         self.new_state = None
-        self.num_rm_states = 4  # Aggiorna questo valore in base al tuo specifico caso
         self.Location = UserType("Location")
-        self.l33 = Object("l33", self.Location)
-        self.l34 = Object("l34", self.Location)
         self.current_state_env = None
-        # self.seq_ag = SequentialSimulatorMA(self)
-        # self.current_state_env = self.seq_ag.get_initial_state()
         self.initial_states = None
-        # self.message_conditions = None
-        self.penalty_cells = [
-            self.position_A,
-            self.position_B,
-            self.position_C,
-            self.position_D,
-            self.position_E,
-            self.position_F,
-        ]  # Coordinate delle celle con penalità
         self.penalty_amount = 0
         self.rewards = 0
         self.frozen_lake = False
@@ -120,16 +98,11 @@ class MAP_RL_Env(BaseEnvironment):
         Returns:
             tuple: Contains observations and infos dictionary for each agent.
         """
-        # Aggiorna epsilon per il controllo dell'esplorazione
         self.rewards = {agent.name: 0 for agent in self.agents}
-        # self.epsilon = max(self.epsilon_end, self.epsilon_decay * self.epsilon)
         self.timestep = 0
         self.current_state = {}
-        # self.seq_ag = SequentialSimulatorMA(self)
-        # self.current_state_env = self.seq_ag.get_initial_state()
         self.current_state_env = self.initial_states
         self.agent_states = {agent.name: {} for agent in self.agents}
-        # self.message_conditions = None
         self.active_agents = {agent.name: True for agent in self.agents}
         self.agent_fail = {agent.name: False for agent in self.agents}
         self.agent_steps = {agent.name: 0 for agent in self.agents}
@@ -145,15 +118,12 @@ class MAP_RL_Env(BaseEnvironment):
             l_algo = agent.get_learning_algorithm()
             initial_position = (
                 agent.get_state()
-            )  # Assumi che get_state ritorni un dizionario con pos_x e pos_y
+            )  # Assume get_state returns a dictionary with pos_x and pos_y
             if isinstance(l_algo, QLearning):
                 l_algo.learn_done_episode()
             self.agent_states[agent.name][(agent.name, "timestep")] = 0
 
-        # Reset the overall environment state
-        # self.current_state_env = self.seq_ag.get_initial_state()
         observations = self.agent_states
-        # Get dummy infos
         infos = {agent: {} for agent in self.agents}
 
         return observations, infos
@@ -172,68 +142,16 @@ class MAP_RL_Env(BaseEnvironment):
         self.rewards = {a.name: 0 for a in self.agents}
         infos = {a.name: {} for a in self.agents}
 
-        # ============== 1) Verifica concurrency "row_*" per l13->l14 ==============
-        # 1) Costruiamo due dizionari:
-        #    - desired_boats[(l_from, l_to)] = [lista_agenti]
-        #    - desired_bridges[(l_from, l_to)] = [lista_agenti]
-        """desired_boats = defaultdict(list)
-        desired_bridges = defaultdict(list)
-
-        # 2) Per ogni agente, se l'azione è row_* => preview (l_from, l_to) => accumulate
-        #                   se l'azione è cross_* => preview (l_from, l_to) => accumulate
-        for ag in self.agents:
-            if not self.active_agents.get(ag.name, True):
-                continue  # agente inattivo
-
-            action = actions[ag.name]
-
-            # Calcola (l_from, l_to) "virtualmente"
-            if action.name.startswith("row_left"):
-                l_from, l_to = self.preview_new_location(ag, action.name)
-                if l_from is not None and l_to is not None:
-                    desired_boats[(l_from, l_to)].append(ag.name)
-
-            elif action.name.startswith("cross_down"):
-                l_from, l_to = self.preview_new_location(ag, action.name)
-                if l_from is not None and l_to is not None:
-                    desired_bridges[(l_from, l_to)].append(ag.name)
-
-        # 3) Attiviamo la barca se >=2 agenti fanno "row_*" sullo stesso arco
-        boat_flu = self.ma_environment.fluent("has_boat")
-        for (loc_from, loc_to), agent_list in desired_boats.items():
-            if len(agent_list) >= 2:
-                # Se vuoi limitare la barca a (l14 <-> l24), controlla:
-                if (str(loc_from)=='l14' and str(loc_to)=='l24') or (str(loc_from)=='l24' and str(loc_to)=='l14'):
-                    node_bt1 = boat_flu(loc_from, loc_to)
-                    node_bt2 = boat_flu(loc_to, loc_from)
-                    new_state = self.current_state_env.make_child({node_bt1: Bool(True)})
-                    new_state = new_state.make_child({node_bt2: Bool(True)})
-                    self.current_state_env = new_state
-                    print(f"Abilitato has_boat({loc_from}->{loc_to})=True, agenti concurrency={agent_list}")
-
-        # 4) Attiviamo il ponte se >=3 agenti fanno "cross_*" sullo stesso arco
-        bridge_flu = self.ma_environment.fluent("has_bridge")
-        for (loc_from, loc_to), agent_list in desired_bridges.items():
-            if len(agent_list) >= 3:
-                # Se vuoi limitare il ponte a (l13 <-> l14), controlla:
-                if (str(loc_from)=='l13' and str(loc_to)=='l14') or (str(loc_from)=='l14' and str(loc_to)=='l13'):
-                    node_br1 = bridge_flu(loc_from, loc_to)
-                    node_br2 = bridge_flu(loc_to, loc_from)
-                    new_state = self.current_state_env.make_child({node_br1: Bool(True)})
-                    new_state = new_state.make_child({node_br2: Bool(True)})
-                    self.current_state_env = new_state
-                    print(f"Abilitato has_bridge({loc_from}->{loc_to})=True, agenti concurrency={agent_list}")"""
-        # --- FASE 2: Ora esegui le azioni effettive ---
+        # --- Phase 2: execute the actions ---
 
         for agent in self.agents:
             if not self.centralized:
                 if not self.active_agents[agent.name]:
-                    # Riempi cmq infos con un default
+                    # Populate infos with default values when an agent is inactive
                     infos[agent.name]["prev_s"] = self.get_state(agent)
                     infos[agent.name]["s"] = self.get_state(agent)
                     infos[agent.name]["Renv"] = 0
-                    # E poi magari salti tutto il resto
-                    continue  # Salta gli agenti terminati
+                    continue  # Skip terminated agents
             current_statee = self.get_state(agent)
             action = actions[agent.name]
             self.execute_agent_action(agent, action, current_statee)
@@ -244,23 +162,16 @@ class MAP_RL_Env(BaseEnvironment):
             self.rewards[agent.name] += reward_env
             self.agent_steps[agent.name] += 1
             infos[agent.name]["prev_s"] = current_statee
-            # infos[agent.name]["prev_q"] = state_rm
             infos[agent.name]["s"] = new_state
-            # infos[agent.name]["q"] = new_state_rm
             infos[agent.name]["Renv"] = reward_env
-            # infos[agent.name]["RQ"] = reward
-
-            # q_learning.update(current_statee, new_state, agent_action, reward, agent, state_rm, new_state_rm)
-            # agent.add_to_state("timestep", self.timestep)
         self.timestep += 1
 
-        # 1) Aggiorna bridges e boats dopo che tutti hanno agito
+        # Update bridges and boats after all agents have acted
         # self.update_bridges_and_boats()
 
         terminations, truncations = self.check_terminations()
-        # Aggiorna il fluente 'has_bridge' alla fine del timestep
+        # Update the has_bridge fluent at the end of the timestep
 
-        # breakpoint()
         observations = self.agent_states
 
         return observations, self.rewards, terminations, truncations, infos
@@ -367,32 +278,13 @@ class MAP_RL_Env(BaseEnvironment):
 
     def update_bridges_and_boats(self):
         """
-        Aggiorna 'has_bridge' e 'has_boat' a False se si è verificato l'attraversamento
-        (ponte "cade" e barca "scompare").
+        Reset "has_bridge" and "has_boat" to False after crossings are completed.
         """
-        # 1) Gestione "bridge_crossings"
-        """for crossing in self.bridge_crossings:
-            current_location, new_location = crossing
-            bridge_flu = self.ma_environment.fluent("has_bridge")
-            # Metto False in entrambi i versi (current->new e new->current)
-            node_br1 = bridge_flu(current_location, new_location)
-            node_br2 = bridge_flu(new_location, current_location)
-            
-            new_state = self.current_state_env.make_child({node_br1: Bool(False)})
-            new_state = new_state.make_child({node_br2: Bool(False)})
-            self.current_state_env = new_state
-
-        # Svuota la lista per il prossimo timestep
-        self.bridge_crossings.clear()"""
-
-        # 2) Gestione "boat_crossings"
         for crossing in self.boat_crossings:
             current_location, new_location = crossing
             boat_flu = self.ma_environment.fluent("has_boat")
-            # Metto False in entrambi i versi
             node_bt1 = boat_flu(current_location, new_location)
             node_bt2 = boat_flu(new_location, current_location)
-            # breakpoint()
             new_state = self.current_state_env.make_child({node_bt1: Bool(False)})
             new_state = new_state.make_child({node_bt2: Bool(False)})
             self.current_state_env = new_state
@@ -407,10 +299,9 @@ class MAP_RL_Env(BaseEnvironment):
             agent: The agent being checked.
             new_state (dict): The new state of the agent.
         """
-        # Controlla se la nuova posizione è una cella di penalità
         agent_pos = (new_state[(agent.name, "pos_x")], new_state[(agent.name, "pos_y")])
         if agent_pos in self.penalty_cells:
-            self.rewards[agent.name] += self.penalty_amount  # Applica la penalità
+            self.rewards[agent.name] += self.penalty_amount  # Apply the penalty
 
     def execute_agent_action(self, agent, action, current_state):
         """
@@ -438,11 +329,6 @@ class MAP_RL_Env(BaseEnvironment):
             action.name, x, y, i, j, self.walls, self.cell_size
         )
         plant = self.is_move_to_plant(action.name, x, y, i, j, self.cell_size)
-        # Se l'agente compie un'azione di "row_*" e l'attraversamento è l24 -> l14 (o viceversa)
-        """if not blocked and action.name in ["row_up", "row_down", "row_left", "row_right"]:
-            if (str(current_location) == "l24" and str(new_location) == "l14") \
-                    or (str(current_location) == "l14" and str(new_location) == "l24"):
-                self.boat_crossings.append((current_location, new_location))"""
 
         if not plant:
             if not blocked:
@@ -461,7 +347,7 @@ class MAP_RL_Env(BaseEnvironment):
                 if state != None:
                     self.current_state_env = state
 
-                    # Registra l'attraversamento del ponte se l'azione è di tipo 'cross'
+                    # Record the bridge crossing when the action is a cross movement
                     if (
                         action.name == "cross_down"
                         and str(current_location) == "l13"
@@ -542,26 +428,26 @@ class MAP_RL_Env(BaseEnvironment):
             "wait": (0, 0),
         }
 
-        # Verifica se l'azione è valida
+        # Validate the action
         if action not in action_to_coord_change:
             raise ValueError(f"Azione non valida: {action}")
 
-        # Ottieni il cambiamento di coordinate per l'azione
+        # Retrieve the coordinate change for the action
         delta_i, delta_j = action_to_coord_change[action]
 
-        # Calcola le coordinate assolute iniziali
+        # Compute the initial absolute coordinates
         absolute_coords = relative_to_absolute(x, y, i, j, cell_size)
 
-        # Determina le nuove coordinate relative in base all'azione
+        # Determine the new relative coordinates based on the action
         new_i = i + delta_i
         new_j = j + delta_j
 
-        # Calcola le nuove coordinate assolute
+        # Compute the new absolute coordinates
         absolute_coords_after_action = relative_to_absolute(
             x, y, new_i, new_j, cell_size
         )
 
-        # Verifica se c'è un muro tra le coordinate iniziali e quelle dopo l'azione
+        # Check whether a wall separates the start and end coordinates
         is_blocked = (absolute_coords, absolute_coords_after_action) in walls or (
             absolute_coords_after_action,
             absolute_coords,
@@ -609,19 +495,18 @@ class MAP_RL_Env(BaseEnvironment):
             "wait": (0, 0),
         }
 
-        # Verifica se l'azione è valida
+        # Validate the action
         if action not in action_to_coord_change:
             raise ValueError(f"Azione non valida: {action}")
         absolute_coords = relative_to_absolute(x, y, i, j, cell_size)
-        # Ottieni il cambiamento di coordinate per l'azione
+        # Retrieve the coordinate change for the action
         dx, dy = action_to_coord_change[action]
 
-        # Forza le coordinate in interi, nel caso ci fossero discrepanze con il formato di self.plant
+        # Force integer coordinates to avoid format mismatches with self.plant
         next_abs_coords = (absolute_coords[0] + dx, absolute_coords[1] + dy)
 
-        # Verifica se la nuova posizione è una pianta
+        # Check whether the next position is a plant
         if next_abs_coords in self.plant:
-            # print(f"Si muove su una pianta! ({absolute_coords} -> {next_abs_coords}) {action}")
             return True
         else:
             return False
@@ -720,26 +605,22 @@ class MAP_RL_Env(BaseEnvironment):
         """
 
         for condition in conditions:
-            if isinstance(
-                condition[0], tuple
-            ):  # La condizione coinvolge un altro agente
+            if isinstance(condition[0], tuple):  # The condition involves another agent
                 agent_condition, fluent_condition = condition[0][0], condition[0][1]
-                # Utilizza messaggi_semplificati per il confronto
                 messaggio_chiave = (agent_condition, fluent_condition)
                 if (
                     messaggio_chiave not in dic_messaggi
                     or dic_messaggi[messaggio_chiave] != condition[1]
                 ):
-                    return False  # La condizione non è soddisfatta
-            else:  # La condizione è locale per l'agente
+                    return False  # The condition is not satisfied
+            else:  # The condition is local to the agent
                 fluent, value = condition
                 if (
                     str(fluent) != current_location_map[0]
                     or value != current_location_map[1]
                 ):
-                    return False  # La condizione locale non è soddisfatta
+                    return False  # The local condition is not satisfied
 
-        # Tutte le condizioni sono soddisfatte
         return True
 
     def extract_agent_ids(self, conditions):
@@ -858,8 +739,7 @@ class MAP_RL_Env(BaseEnvironment):
 
     def preview_new_location(self, agent, action_name):
         """
-        Ritorna (current_location, new_location) come farebbe 'execute_agent_action'
-        ma senza modificare davvero lo stato dell'ambiente.
+        Returns (current location, new location) like 'execute_agent_action' would but without actually changing the state of the environment.
         """
         current_state = self.get_state(agent)
         x = current_state[(agent.name, "pos_x")]

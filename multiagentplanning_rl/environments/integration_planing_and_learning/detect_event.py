@@ -3,8 +3,8 @@ from multiagent_rlrm.multi_agent.event_detector import EventDetector
 
 class PositionEventDetector(EventDetector):
     """
-    Classe che rileva eventi basati sulla posizione corrente dell'agente,
-    supportando sia condizioni basate su fluents che su coordinate assolute.
+    Detects events based on the agent's current position, supporting both fluent
+    conditions and absolute coordinates.
     """
 
     def __init__(self, positions, agent):
@@ -30,34 +30,34 @@ class PositionEventDetector(EventDetector):
             conditions (list or None): The conditions that triggered an event, or None if no event is detected.
         """
         current_location_map = self.get_current_location_map(current_state)
-        # Ottieni lo stato corrente della Reward Machine dell'agente
+        # Retrieve the agent's current Reward Machine state
         state_rm_current = self.agent.reward_machine.get_current_state()
         transitions = self.agent.reward_machine.get_transitions
 
-        # Itera attraverso le transizioni possibili
+        # Iterate through the possible transitions
         for (state, conditions), (next_state, reward) in transitions.items():
             if state != state_rm:
-                continue  # Salta se lo stato non corrisponde allo stato RM passato
+                continue  # Skip if the state does not match the provided RM state
 
-            # Gestione dello stato 'X' nel prossimo stato
+            # Handle transitions that include state "X"
             if "X" in next_state:
                 self.agent.message_conditions = conditions
 
-            # Se l'agente è nello stato 'X', gestisci la comunicazione
+            # If the agent is in state "X", manage the communication
             if "X" in state_rm_current:
                 self.handle_state_X(conditions, current_location_map)
                 if self.check_conditions(
                     conditions, current_location_map, current_state
                 ):
-                    return conditions  # Evento rilevato
+                    return conditions  # Event detected
             else:
-                # Verifica se le condizioni locali sono soddisfatte
+                # Check whether the local conditions are satisfied
                 if self.check_local_conditions(
                     conditions, current_location_map, current_state
                 ):
-                    return conditions  # Evento rilevato
+                    return conditions  # Event detected
 
-        return None  # Nessun evento rilevato
+        return None  # No event detected
 
     def get_current_location_map(self, current_state):
         """
@@ -145,13 +145,13 @@ class PositionEventDetector(EventDetector):
         """
         key, expected_value = condition
 
-        # Se la condizione è una coordinata assoluta (tuple di interi)
+        # If the condition is an absolute coordinate (tuple of integers)
         if isinstance(key, tuple) and all(isinstance(coord, int) for coord in key):
-            # Ottieni la posizione assoluta corrente dell'agente
+            # Retrieve the agent's current absolute position
             absolute_position = self.get_absolute_position(current_state)
             return key == absolute_position and expected_value == True
         else:
-            # La condizione è un fluent (ad esempio, pos(l13))
+            # The condition is a fluent (for example, pos(l13))
             fluent = str(key)
             actual_fluent, actual_value = current_location_map
             return fluent == actual_fluent and expected_value == actual_value
@@ -190,9 +190,9 @@ class PositionEventDetector(EventDetector):
         """
         dic_messaggi = self.agent.return_messages()
         if not dic_messaggi:
-            return False  # Nessun messaggio ricevuto, condizioni non soddisfatte
+            return False  # No messages received, conditions not satisfied
         for condition in conditions:
-            if isinstance(condition[0], tuple):  # Condizione basata su messaggi
+            if isinstance(condition[0], tuple):  # Message-based condition
                 if not self.check_message_condition(condition, dic_messaggi):
                     return False
         return True

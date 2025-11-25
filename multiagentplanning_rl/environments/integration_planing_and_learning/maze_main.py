@@ -13,7 +13,7 @@ from multiagentplanning_rl.utils.ma_sequential_simulator import (
 from multiagentplanning_rl.environments.utils_envs.evaluation_metrics import *
 import json
 from multiagentplanning_rl.utils.message import Message
-from ma_maze_office import MAP_RL_Env
+from ma_environment import MAP_RL_Env
 from multiagentplanning_rl.render.render import EnvironmentRenderer
 from multiagentplanning_rl.environments.integration_planing_and_learning.state_encoder import (
     StateEncoderMAPRL,
@@ -1338,7 +1338,6 @@ def initialize_reward_machines(experiment):
     return {agent_label: rm for agent_label, (rm, _) in rm_event_pairs.items()}
 
 
-# Funzione principale per eseguire l'esperimento
 def run_experiment(num_episodes, wandb_enabled, experiment):
     """Train agents for the selected experiment while logging to WandB if enabled."""
     if wandb_enabled:
