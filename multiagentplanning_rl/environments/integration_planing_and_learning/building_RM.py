@@ -1,20 +1,36 @@
-"""A utility for building transition rules for multi-agent scheduling."""
+"""Utilities for deriving a reward machine from a multi-agent partial-order plan.
+
+This module processes partial-order plans generated with unified-planning's
+multi-agent extensions and derives the dependencies needed to construct a reward
+machine (RM). The workflow identifies direct fluent dependencies between
+actions, groups actions that must occur sequentially or concurrently, and
+validates that grounded preconditions remain consistent when actions are
+reordered. The resulting structures can then be consumed by downstream RL code
+that expects RM-compatible transition descriptions.
+"""
 
 import pickle
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
-import networkx as nx
-import unified_planning as up
-import unified_planning.model.walkers as walkers
-import unified_planning.plans as plans
-from unified_planning.exceptions import UPUsageError, UPValueError
-from unified_planning.model import Expression, FNode, InstantaneousAction
-from unified_planning.model.operators import OperatorKind
-from unified_planning.plot import show_partial_order_plan
+import networkx as nx  # type: ignore[import-untyped]
+import unified_planning as up  # type: ignore[import-untyped]
+import unified_planning.plans as plans  # type: ignore[import-untyped]
+from unified_planning.engines.results import PlanGenerationResult  # type: ignore[import-untyped]
+from unified_planning.environment import Environment  # type: ignore[import-untyped]
+from unified_planning.exceptions import UPUsageError, UPValueError  # type: ignore[import-untyped]
+from unified_planning.model import Expression, FNode, InstantaneousAction  # type: ignore[import-untyped]
+from unified_planning.model.multi_agent.ma_environment import MAEnvironment  # type: ignore[import-untyped]
+from unified_planning.model.multi_agent.ma_problem import MultiAgentProblem  # type: ignore[import-untyped]
+from unified_planning.model.operators import OperatorKind  # type: ignore[import-untyped]
+from unified_planning.model.walkers.expression_quantifiers_remover import ExpressionQuantifiersRemover  # type: ignore[import-untyped]
+from unified_planning.model.walkers.free_vars import FreeVarsExtractor  # type: ignore[import-untyped]
+from unified_planning.model.walkers.simplifier import Simplifier  # type: ignore[import-untyped]
+from unified_planning.model.walkers.substituter import Substituter  # type: ignore[import-untyped]
+from unified_planning.plot import show_partial_order_plan  # type: ignore[import-untyped]
 
 
 def directly_depends_on(
-    partial_order_plan: plans.PartialOrderPlan, problem: Any
+    partial_order_plan: plans.PartialOrderPlan, problem: MultiAgentProblem
 ) -> tuple[
     Dict[plans.ActionInstance, List[plans.ActionInstance]], List[Dict[str, Any]]
 ]:
@@ -26,10 +42,11 @@ def directly_depends_on(
     :return: A tuple with a mapping from action to its direct dependencies and a list of
         dependency metadata.
     """
-    subs = partial_order_plan._environment.substituter
-    simp = partial_order_plan._environment.simplifier
-    eqr = walkers.ExpressionQuantifiersRemover(partial_order_plan._environment)
-    fve = partial_order_plan._environment.free_vars_extractor
+    environment = cast(Environment, partial_order_plan._environment)
+    subs: Substituter = environment.substituter
+    simp: Simplifier = environment.simplifier
+    eqr = ExpressionQuantifiersRemover(environment)
+    fve: FreeVarsExtractor = environment.free_vars_extractor
 
     graph = partial_order_plan._graph
     last_modifier: Dict[tuple[FNode, str], plans.ActionInstance] = {}
@@ -98,12 +115,12 @@ def directly_depends_on(
 def compute_required_fluents(
     inst_action: InstantaneousAction,
     action_instance: up.plans.plan.ActionInstance,
-    problem: Any,
-    subs: Any,
-    simp: Any,
-    eqr: walkers.ExpressionQuantifiersRemover,
-    fve: walkers.FreeVarsExtractor,
-) -> tuple[set[FNode], dict]:
+    problem: MultiAgentProblem,
+    subs: Substituter,
+    simp: Simplifier,
+    eqr: ExpressionQuantifiersRemover,
+    fve: FreeVarsExtractor,
+) -> tuple[Set[FNode], Dict[Expression, Expression]]:
     """Return fluents and parameter assignments required for an action.
 
     :param inst_action: The instantaneous action being considered.
@@ -119,7 +136,7 @@ def compute_required_fluents(
     for prec in inst_action.preconditions:
         lifted_required_fluents |= fve.get(eqr.remove_quantifiers(prec, problem))
 
-    assignments_action = dict(
+    assignments_action: Dict[Expression, Expression] = dict(
         zip(inst_action.parameters, action_instance.actual_parameters)
     )
     required_fluents: Set[FNode] = {
@@ -131,11 +148,11 @@ def compute_required_fluents(
 
 def compute_grounded_fluents(
     inst_action: InstantaneousAction,
-    assignments_action: dict,
-    problem: Any,
-    simp: Any,
-    subs: Any,
-) -> set[FNode]:
+    assignments_action: Dict[Expression, Expression],
+    problem: MultiAgentProblem,
+    simp: Simplifier,
+    subs: Substituter,
+) -> Set[FNode]:
     """Calculate grounded fluents resulting from action effects.
 
     :param inst_action: The instantaneous action being processed.
@@ -155,7 +172,7 @@ def compute_grounded_fluents(
 
 
 def remove_fluents_if_owned_by_environment(
-    fluents: Set[FNode], environment: Any
+    fluents: Set[FNode], environment: MAEnvironment
 ) -> Set[FNode]:
     """Remove fluents owned by the environment from the provided set.
 
@@ -174,11 +191,11 @@ def remove_fluents_if_owned_by_environment(
 
 
 def some_comparison_function(
-    current_required_fluents,
-    current_grounded_fluent,
-    next_required_fluents,
-    next_grounded_fluent,
-    problem,
+    current_required_fluents: Set[FNode],
+    current_grounded_fluent: Set[FNode],
+    next_required_fluents: Set[FNode],
+    next_grounded_fluent: Set[FNode],
+    problem: MultiAgentProblem,
 ) -> bool:
     """Compare fluent requirements/effects between two actions.
 
@@ -208,7 +225,9 @@ def some_comparison_function(
     )
 
 
-def filtra_fluenti_ambientali(azione: InstantaneousAction, environment: Any) -> None:
+def filtra_fluenti_ambientali(
+    azione: InstantaneousAction, environment: MAEnvironment
+) -> None:
     """Remove environment-owned fluents from an action's preconditions and effects.
 
     :param azione: The action to sanitize.
@@ -254,8 +273,8 @@ def deve_essere_aggiunta(
 
 def filtra_dipendenze(
     dipendenze: List[plans.ActionInstance],
-    sequenza: Dict[Any, List[Any]],
-    azioni_end: List[Any],
+    sequenza: Dict[Optional[plans.ActionInstance], List[plans.ActionInstance]],
+    azioni_end: List[plans.ActionInstance],
 ) -> List[plans.ActionInstance]:
     """Filter out dependencies already represented by sequences or endings.
 
@@ -274,13 +293,14 @@ def filtra_dipendenze(
 class SequentialPlanValidator:
     """Validate sequential consistency between actions in a plan."""
 
-    def __init__(self, pop_plan: plans.Plan):
+    def __init__(self, pop_plan: PlanGenerationResult):
         """Initialize validator utilities from the planning environment."""
         self.pop_plan = pop_plan
-        self.subs = pop_plan.plan._environment.substituter
-        self.simp = pop_plan.plan._environment.simplifier
-        self.eqr = walkers.ExpressionQuantifiersRemover(pop_plan.plan._environment)
-        self.fve = pop_plan.plan._environment.free_vars_extractor
+        environment = cast(Environment, pop_plan.plan._environment)
+        self.subs: Substituter = environment.substituter
+        self.simp: Simplifier = environment.simplifier
+        self.eqr = ExpressionQuantifiersRemover(environment)
+        self.fve: FreeVarsExtractor = environment.free_vars_extractor
         self.eff_cumulativi_per_agente: Dict[str, Dict[FNode, Any]] = {}
         self.eff_cumulativi_environment: Dict[str, Dict[FNode, Any]] = {}
 
@@ -325,7 +345,9 @@ class SequentialPlanValidator:
             return True
         return False
 
-    def validate(self, actions: List[plans.ActionInstance], problem: Any) -> None:
+    def validate(
+        self, actions: List[plans.ActionInstance], problem: MultiAgentProblem
+    ) -> None:
         """Validate that cumulative effects align with the next action's preconditions."""
         found_contradition = False
         for i in range(len(actions) - 1):
@@ -336,7 +358,7 @@ class SequentialPlanValidator:
                 action.agent.name, {}
             )
             effetti_environment = self.eff_cumulativi_environment.setdefault("env", {})
-            assignments_action = dict(
+            assignments_action: Dict[Expression, Expression] = dict(
                 zip(action.action.parameters, action.actual_parameters)
             )
             for effect in action.action.effects:
@@ -364,7 +386,7 @@ class SequentialPlanValidator:
             print("Valid Plan!")
 
     def _prepare_preconditions(
-        self, next_action: plans.ActionInstance, problem: Any
+        self, next_action: plans.ActionInstance, problem: MultiAgentProblem
     ) -> Dict[FNode, bool]:
         """Ground preconditions for a specific action instance."""
         prec_agente: Dict[FNode, bool] = {}
@@ -401,9 +423,9 @@ class SequentialPlanValidator:
 
 def estrai_cambiamenti_fluenti_per_rm(
     azione_con_dipendenze: Dict[plans.ActionInstance, List[plans.ActionInstance]],
-    problem: Any,
-    simp: Any,
-    subs: Any,
+    problem: MultiAgentProblem,
+    simp: Simplifier,
+    subs: Substituter,
 ) -> Dict[str, Dict[str, List[Tuple[FNode, str, Any]]]]:
     """Extract fluent changes for an action and its dependencies for RM building.
 
@@ -464,7 +486,7 @@ def estrai_cambiamenti_fluenti_per_rm(
 
 def aggiorna_dipendenze_concurrent(
     acts: Dict[str, List[Dict[str, Dict[str, List[Tuple[FNode, str, Any]]]]]],
-    sequenza: Dict[Any, List[Any]],
+    sequenza: Dict[Optional[plans.ActionInstance], List[plans.ActionInstance]],
 ) -> Dict[str, List[Dict[str, Dict[str, List[Tuple[FNode, str, Any]]]]]]:
     """Ensure concurrent actions include all dependency fluents across agents.
 
@@ -495,9 +517,7 @@ def aggiorna_dipendenze_concurrent(
                             for fl in azione_corrente
                         )
                         if fluente_manca:
-                            print(
-                                f"A fluent is missing {altro_agent} nelle dependencies of {nome_azione} of {agent}"
-                            )
+                            # print(f"A fluent is missing {altro_agent} nelle dependencies of {nome_azione} of {agent}")
                             for azione_altra in acts[altro_agent]:
                                 if (
                                     list(azione_altra.keys())[0]
@@ -584,24 +604,24 @@ def rm_concurrent_sequence(
 def load_plan_and_problem(
     plan_path: str,
     problem_path: str,
-) -> tuple[Any, Any]:
+) -> tuple[PlanGenerationResult, MultiAgentProblem]:
     """Load the default plan and problem definitions."""
 
     with open(plan_path, "rb") as file:
-        pop_plan = pickle.load(file)
+        pop_plan: PlanGenerationResult = pickle.load(file)
     with open(problem_path, "rb") as file:
-        problem = pickle.load(file)
+        problem: MultiAgentProblem = pickle.load(file)
 
     return pop_plan, problem
 
 
 def build_sequences(
     ordered_nodes_list: List[plans.ActionInstance],
-    problem: Any,
-    subs: Any,
-    simp: Any,
-    eqr: walkers.ExpressionQuantifiersRemover,
-    fve: walkers.FreeVarsExtractor,
+    problem: MultiAgentProblem,
+    subs: Substituter,
+    simp: Simplifier,
+    eqr: ExpressionQuantifiersRemover,
+    fve: FreeVarsExtractor,
 ) -> Dict[Optional[plans.ActionInstance], List[plans.ActionInstance]]:
     """Identify action sequences based on fluent comparisons."""
 
@@ -612,9 +632,7 @@ def build_sequences(
 
     for i in range(len(ordered_nodes_list) - 1):
         current_action = ordered_nodes_list[i]
-        next_action = (
-            ordered_nodes_list[i + 1] if i + 1 < len(ordered_nodes_list) else None
-        )
+        next_action = ordered_nodes_list[i + 1]
 
         current_inst_action = cast(InstantaneousAction, current_action.action)
         next_action_inst_action = cast(InstantaneousAction, next_action.action)
@@ -662,7 +680,7 @@ def aggregate_dependencies(
     dipendenze_dirette: Dict[plans.ActionInstance, List[plans.ActionInstance]],
     sequenza: Dict[Optional[plans.ActionInstance], List[plans.ActionInstance]],
     azioni_end: List[plans.ActionInstance],
-) -> Dict[Any, List[plans.ActionInstance]]:
+) -> Dict[Optional[plans.ActionInstance], List[plans.ActionInstance]]:
     """Collect unique dependencies per sequence."""
 
     dipendenze_aggregate: Dict[Any, List[plans.ActionInstance]] = {}
@@ -689,8 +707,10 @@ def crea_nuovo_piano(
     dipendenze_dirette: Dict[plans.ActionInstance, List[plans.ActionInstance]],
     sequenza: Dict[Optional[plans.ActionInstance], List[plans.ActionInstance]],
     azioni_end: List[plans.ActionInstance],
-    dipendenze_aggregate: Dict[Any, List[plans.ActionInstance]],
-    problem: Any,
+    dipendenze_aggregate: Dict[
+        Optional[plans.ActionInstance], List[plans.ActionInstance]
+    ],
+    problem: MultiAgentProblem,
 ) -> Dict[plans.ActionInstance, List[plans.ActionInstance]]:
     """Assemble the updated plan inserting concurrent actions where needed."""
 
@@ -727,20 +747,23 @@ def crea_nuovo_piano(
     return nuovo_piano
 
 
-def build_reward_machine(pop_plan: Any, problem: Any) -> Dict[str, Any]:
+def build_reward_machine(
+    pop_plan: PlanGenerationResult, problem: MultiAgentProblem
+) -> Dict[str, Any]:
     """Execute the RM building workflow for a given plan and problem."""
 
     direct_dep, data_dep = directly_depends_on(pop_plan.plan, problem)
     ordered_nodes = nx.topological_sort(pop_plan.plan._graph)
     ordered_nodes_list = list(ordered_nodes)
 
-    subs = pop_plan.plan._environment.substituter
-    simp = pop_plan.plan._environment.simplifier
-    eqr = walkers.ExpressionQuantifiersRemover(pop_plan.plan._environment)
-    fve = pop_plan.plan._environment.free_vars_extractor
+    environment = cast(Environment, pop_plan.plan._environment)
+    subs: Substituter = environment.substituter
+    simp: Simplifier = environment.simplifier
+    eqr = ExpressionQuantifiersRemover(environment)
+    fve: FreeVarsExtractor = environment.free_vars_extractor
 
     sequenza = build_sequences(ordered_nodes_list, problem, subs, simp, eqr, fve)
-    print(sequenza)
+    # print(sequenza)
 
     dipendenze_dirette = direct_dep
     azioni_end = [
@@ -753,7 +776,7 @@ def build_reward_machine(pop_plan: Any, problem: Any) -> Dict[str, Any]:
         dipendenze_dirette, sequenza, azioni_end, dipendenze_aggregate, problem
     )
 
-    print("New plan:", nuovo_piano)
+    # print("New plan:", nuovo_piano)
 
     liste_di_sequenze = [[chiave] + valori for chiave, valori in sequenza.items()]
     first_sequenza = liste_di_sequenze[0]
@@ -772,35 +795,43 @@ def build_reward_machine(pop_plan: Any, problem: Any) -> Dict[str, Any]:
     cambiamenti_per_rm = estrai_cambiamenti_fluenti_per_rm(
         risultati["a2"][4], problem, simp, subs
     )
-    print(cambiamenti_per_rm)
+    # print(cambiamenti_per_rm)
 
     acts_: List[Dict[str, Dict[str, List[Tuple[FNode, str, Any]]]]] = []
     dic: Dict[str, List[Dict[str, Dict[str, List[Tuple[FNode, str, Any]]]]]] = {}
     for j, k in risultati.items():
         acts_ = []
-        for i in k:
-            acts_.append(estrai_cambiamenti_fluenti_per_rm(i, problem, simp, subs))
+        for risultato in k:
+            acts_.append(
+                estrai_cambiamenti_fluenti_per_rm(risultato, problem, simp, subs)
+            )
         dic[j] = acts_
 
     nuovo_acts_aggiornato = aggiorna_dipendenze_concurrent(dic, sequenza)
-    print(nuovo_acts_aggiornato)
+    # print(nuovo_acts_aggiornato)
 
-    nuvo_dic = nuovo_acts_aggiornato
-    transitions: Dict[Tuple[str, Tuple[Any, ...]], Tuple[str, int]] = {}
-    current_state = "state1"
-    reward = 10
-    state_counter = 2
+    nuvo_dic: Dict[
+        str, List[Dict[str, Dict[str, List[Tuple[FNode, str, Any]]]]]
+    ] = nuovo_acts_aggiornato
     RM_dict: Dict[str, Dict[Tuple[str, Tuple[Any, ...]], Tuple[str, int]]] = {}
-    for agent, actions in nuvo_dic.items():
-        current_state = "state1"
-        reward = 10
-        state_counter = 2
-        transitions = {}
+    for agent, actions_list in nuvo_dic.items():
+        typed_actions_list = cast(
+            List[Dict[str, Dict[str, List[Tuple[FNode, str, Any]]]]], actions_list
+        )
+        current_state: str = "state1"
+        reward: int = 10
+        state_counter: int = 2
+        transitions: Dict[Tuple[str, Tuple[Any, ...]], Tuple[str, int]] = {}
 
-        for i, action in enumerate(actions):
+        for i in range(len(typed_actions_list)):
+            action = typed_actions_list[i]
             action_key = list(action.keys())[0]
-            action_fluents = action[action_key]["current_action"]
-            dependencies = action[action_key]["dependencies"]
+            action_fluents: List[Tuple[FNode, str, Any]] = action[action_key][
+                "current_action"
+            ]
+            dependencies: List[Tuple[FNode, str, Any]] = action[action_key][
+                "dependencies"
+            ]
 
             if "_concurrent" in action_key and i == 0:
                 condition_for_state1X = tuple(
@@ -822,8 +853,8 @@ def build_reward_machine(pop_plan: Any, problem: Any) -> Dict[str, Any]:
                 )
                 next_state = (
                     f"state{state_counter}X"
-                    if i < len(actions) - 1
-                    and "_concurrent" in list(actions[i + 1].keys())[0]
+                    if i < len(typed_actions_list) - 1
+                    and "_concurrent" in list(typed_actions_list[i + 1].keys())[0]
                     else f"state{state_counter}"
                 )
                 transitions[(current_state, condition)] = (next_state, reward)
