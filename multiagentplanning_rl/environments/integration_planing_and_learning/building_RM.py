@@ -581,22 +581,29 @@ def rm_concurrent_sequence(
     return new_dict
 
 
-def main() -> None:
-    """Execute the RM building workflow."""
-    with open("planning_utils/result_maze_5_agents.pkl", "rb") as file:
+def load_plan_and_problem(
+    plan_path: str,
+    problem_path: str,
+) -> tuple[Any, Any]:
+    """Load the default plan and problem definitions."""
+
+    with open(plan_path, "rb") as file:
         pop_plan = pickle.load(file)
-    with open("planning_utils/problem_maze_5_agents.pkl", "rb") as file:
+    with open(problem_path, "rb") as file:
         problem = pickle.load(file)
 
-    direct_dep, data_dep = directly_depends_on(pop_plan.plan, problem)
+    return pop_plan, problem
 
-    ordered_nodes = nx.topological_sort(pop_plan.plan._graph)
-    ordered_nodes_list = list(ordered_nodes)
 
-    subs = pop_plan.plan._environment.substituter
-    simp = pop_plan.plan._environment.simplifier
-    eqr = walkers.ExpressionQuantifiersRemover(pop_plan.plan._environment)
-    fve = pop_plan.plan._environment.free_vars_extractor
+def build_sequences(
+    ordered_nodes_list: List[plans.ActionInstance],
+    problem: Any,
+    subs: Any,
+    simp: Any,
+    eqr: walkers.ExpressionQuantifiersRemover,
+    fve: walkers.FreeVarsExtractor,
+) -> Dict[Optional[plans.ActionInstance], List[plans.ActionInstance]]:
+    """Identify action sequences based on fluent comparisons."""
 
     sequenza: Dict[Optional[plans.ActionInstance], List[plans.ActionInstance]] = {}
     in_sequence = False
@@ -648,17 +655,17 @@ def main() -> None:
                 in_sequence = False
             previous_action = current_action
 
-    print(sequenza)
+    return sequenza
 
-    dipendenze_dirette = direct_dep
-    nuovo_piano: Dict[plans.ActionInstance, List[plans.ActionInstance]] = {}
-    azioni_gia_modificate: Set[str] = set()
-    azioni_end = [
-        sequenza_azioni[-1] for sequenza_azioni in sequenza.values() if sequenza_azioni
-    ]
+
+def aggregate_dependencies(
+    dipendenze_dirette: Dict[plans.ActionInstance, List[plans.ActionInstance]],
+    sequenza: Dict[Optional[plans.ActionInstance], List[plans.ActionInstance]],
+    azioni_end: List[plans.ActionInstance],
+) -> Dict[Any, List[plans.ActionInstance]]:
+    """Collect unique dependencies per sequence."""
 
     dipendenze_aggregate: Dict[Any, List[plans.ActionInstance]] = {}
-
     for chiave, azioni in sequenza.items():
         if chiave not in dipendenze_aggregate:
             dipendenze_aggregate[chiave] = []
@@ -674,6 +681,21 @@ def main() -> None:
                         and dipendenza not in sequenza[chiave]
                     ):
                         dipendenze_aggregate[chiave].append(dipendenza)
+
+    return dipendenze_aggregate
+
+
+def crea_nuovo_piano(
+    dipendenze_dirette: Dict[plans.ActionInstance, List[plans.ActionInstance]],
+    sequenza: Dict[Optional[plans.ActionInstance], List[plans.ActionInstance]],
+    azioni_end: List[plans.ActionInstance],
+    dipendenze_aggregate: Dict[Any, List[plans.ActionInstance]],
+    problem: Any,
+) -> Dict[plans.ActionInstance, List[plans.ActionInstance]]:
+    """Assemble the updated plan inserting concurrent actions where needed."""
+
+    nuovo_piano: Dict[plans.ActionInstance, List[plans.ActionInstance]] = {}
+    azioni_gia_modificate: Set[str] = set()
 
     for azione, dipendenze in dipendenze_dirette.items():
         if deve_essere_aggiunta(azione, sequenza, azioni_end) and any(
@@ -701,6 +723,35 @@ def main() -> None:
             nuovo_piano[nuova_azione_instance] = dipendenze_da_usare
         elif deve_essere_aggiunta(azione, sequenza, azioni_end):
             nuovo_piano[azione] = filtra_dipendenze(dipendenze, sequenza, azioni_end)
+
+    return nuovo_piano
+
+
+def build_reward_machine(pop_plan: Any, problem: Any) -> Dict[str, Any]:
+    """Execute the RM building workflow for a given plan and problem."""
+
+    direct_dep, data_dep = directly_depends_on(pop_plan.plan, problem)
+    ordered_nodes = nx.topological_sort(pop_plan.plan._graph)
+    ordered_nodes_list = list(ordered_nodes)
+
+    subs = pop_plan.plan._environment.substituter
+    simp = pop_plan.plan._environment.simplifier
+    eqr = walkers.ExpressionQuantifiersRemover(pop_plan.plan._environment)
+    fve = pop_plan.plan._environment.free_vars_extractor
+
+    sequenza = build_sequences(ordered_nodes_list, problem, subs, simp, eqr, fve)
+    print(sequenza)
+
+    dipendenze_dirette = direct_dep
+    azioni_end = [
+        sequenza_azioni[-1] for sequenza_azioni in sequenza.values() if sequenza_azioni
+    ]
+    dipendenze_aggregate = aggregate_dependencies(
+        dipendenze_dirette, sequenza, azioni_end
+    )
+    nuovo_piano = crea_nuovo_piano(
+        dipendenze_dirette, sequenza, azioni_end, dipendenze_aggregate, problem
+    )
 
     print("New plan:", nuovo_piano)
 
@@ -812,6 +863,32 @@ def main() -> None:
     RM_dict_true = rimuovi_fluenti_falsi(RM_dict)
     RM_dict_true_seq = rm_concurrent_sequence(RM_dict_true)
 
+    return {
+        "direct_dependencies": dipendenze_dirette,
+        "dependency_metadata": data_dep,
+        "sequenza": sequenza,
+        "nuovo_piano": nuovo_piano,
+        "risultati": risultati,
+        "nuovo_acts_aggiornato": nuovo_acts_aggiornato,
+        "RM_dict": RM_dict,
+        "RM_dict_true": RM_dict_true,
+        "RM_dict_true_seq": RM_dict_true_seq,
+    }
 
+
+def main() -> None:
+    """Entrypoint that loads sample data and builds the reward machine."""
+    pop_plan, problem = load_plan_and_problem(
+        "planning_utils/result_maze_5_agents.pkl",
+        "planning_utils/problem_maze_5_agents.pkl",
+    )
+    build_reward_machine(pop_plan, problem)
+
+
+# The functions above can be imported without triggering any side effects.
+# The following guard only executes the default pipeline when the module is
+# run directly (e.g., `python building_RM.py`). When the module is imported
+# elsewhere, `main` is not executed, allowing callers to invoke
+# `load_plan_and_problem` or `build_reward_machine` explicitly.
 if __name__ == "__main__":
     main()
