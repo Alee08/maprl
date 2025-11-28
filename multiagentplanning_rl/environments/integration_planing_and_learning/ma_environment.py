@@ -9,7 +9,9 @@ from multiagentplanning_rl.utils.ma_sequential_simulator import (
 import cProfile
 import json
 import pickle
-from building_RM import RM_dict, RM_dict_true, RM_dict_true_seq
+from multiagentplanning_rl.environments.integration_planing_and_learning.building_RM import (
+    build_reward_machine,
+)
 from multiagentplanning_rl.utils.message import Message
 from multiagent_rlrm.multi_agent.base_environment import BaseEnvironment
 from collections import defaultdict
