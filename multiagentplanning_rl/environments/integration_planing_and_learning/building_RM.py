@@ -1,66 +1,28 @@
-"""import subprocess
-
-def download_file(url, file_name):
-    try:
-        # Costruisce il comando curl
-        command = ['curl', '-L', '-o', file_name, url]
-
-        # Esegue il comando
-        subprocess.run(command, check=True)
-        print(f"File scaricato con successo: {file_name}")
-    except subprocess.CalledProcessError:
-        print(f"Errore durante il download del file: {file_name}")
-
-# URL e nomi file da scaricare
-urls_and_files = [
-    ("https://drive.google.com/uc?export=download&id=1zljnr76rj6-dJUnkgfhZrt0LTfxsU9UG", "result_maze_5_agents.pkl"),
-    ("https://drive.google.com/uc?export=download&id=17eJ--w0Khwm-oxQxz885Irhc3EkPXxaR", "problem_maze_5_agents.pkl")
-]
-
-# Esegue il download per ogni coppia URL/nome file
-for url, file_name in urls_and_files:
-    download_file(url, file_name)"""
+"""A utility for building transition rules for multi-agent scheduling."""
 
 import pickle
+from typing import Any, Dict, List, Optional, Set, Union, cast
+
 import networkx as nx
-import unified_planning
-import unified_planning.model.fluent
-import collections
-from unified_planning.environment import Environment
+import unified_planning as up
+import unified_planning.model.walkers as walkers
+import unified_planning.plans as plans
+from unified_planning.exceptions import UPUsageError, UPValueError
+from unified_planning.model import FNode, InstantaneousAction, Expression
 from unified_planning.model.operators import OperatorKind
-from typing import Dict, List, Optional, Set, Union
-from fractions import Fraction
-from unified_planning.model.fnode import FNode
-from collections import defaultdict
-from unified_planning.io.ma_pddl_writer import MAPDDLWriter
-
-
-# Apri il file in modalità di lettura binaria
+from unified_planning.plot import show_partial_order_plan
 
 
 # import maze 5 agents plan
 with open("planning_utils/result_maze_5_agents.pkl", "rb") as file:
     pop_plan = pickle.load(file)
-# import maze 5 agents problem
 with open("planning_utils/problem_maze_5_agents.pkl", "rb") as file:
     problem = pickle.load(file)
 
-
-from unified_planning.plot import show_partial_order_plan
-
 # show_partial_order_plan(pop_plan.plan, "pop_plan")
 
-import unified_planning as up
-import unified_planning.plans as plans
-import unified_planning.model.walkers as walkers
-from unified_planning.environment import Environment
-from unified_planning.exceptions import UPUsageError
-from unified_planning.model import FNode, InstantaneousAction, Expression
-from typing import Dict, List, Any, Set, cast
-from unified_planning.exceptions import UPValueError
-
 ######################################Direct Dependecies Between Actions######################################
-# La funzione che stabilisce le dipendenze tra azioni
+# The function that establishes dependencies between actions
 def directly_depends_on(partial_order_plan, problem):
     subs = partial_order_plan._environment.substituter
     simp = partial_order_plan._environment.simplifier
@@ -160,29 +122,63 @@ direct_dep, data_dep = directly_depends_on(pop_plan.plan, problem)
 ##################################################################################################################
 
 ##########################################Identify concurrent actions##########################################
-from typing import Dict, List, Any, Set, cast
-from unified_planning.model import InstantaneousAction
 
-# Inizializzazione delle strutture dati
+
+def compute_required_fluents(
+    inst_action: InstantaneousAction,
+    action_instance: up.plans.plan.ActionInstance,
+    problem: Any,
+    subs: Any,
+    simp: Any,
+    eqr: walkers.ExpressionQuantifiersRemover,
+    fve: walkers.FreeVarsExtractor,
+) -> tuple[set[FNode], dict]:
+    """Returns the requested fluents and assignments for the specific action."""
+
+    lifted_required_fluents: Set[FNode] = set()
+    for prec in inst_action.preconditions:
+        lifted_required_fluents |= fve.get(eqr.remove_quantifiers(prec, problem))
+
+    assignments_action = dict(
+        zip(inst_action.parameters, action_instance.actual_parameters)
+    )
+    required_fluents: Set[FNode] = {
+        simp.simplify(subs.substitute(lifted_fluent, assignments_action))
+        for lifted_fluent in lifted_required_fluents
+    }
+    return required_fluents, assignments_action
+
+
+def compute_grounded_fluents(
+    inst_action: InstantaneousAction,
+    assignments_action: dict,
+    problem: Any,
+    simp: Any,
+    subs: Any,
+) -> set[FNode]:
+    """Calculate the fluents resulting from the effects of the action."""
+
+    grounded_fluents: Set[FNode] = set()
+    for effect in inst_action.effects:
+        for eff in effect.expand_effect(problem):
+            grounded_fluents.add(
+                simp.simplify(subs.substitute(eff.fluent, assignments_action))
+            )
+    return grounded_fluents
+
+
 sequenza = {}
-# azioni = seq_plan_.actions
+# actions = seq_plan_.actions
 
-# Ordinamento topologico dei nodi nel grafico del piano
+# Topological ordering of nodes in the plane graph
 ordered_nodes = nx.topological_sort(pop_plan.plan._graph)
 ordered_nodes_list = list(ordered_nodes)
 
-# Assumi che queste siano funzioni o classi importate dal tuo ambiente
+# Assume these are functions or classes imported from your environment
 subs = pop_plan.plan._environment.substituter
 simp = pop_plan.plan._environment.simplifier
 eqr = walkers.ExpressionQuantifiersRemover(pop_plan.plan._environment)
 fve = pop_plan.plan._environment.free_vars_extractor
-
-"""def some_comparison_function(current_required_fluents, current_grounded_fluent, next_required_fluents, next_grounded_fluent):
-    # Implementa la tua logica specifica qui
-    # Questa funzione determina se c'è una relazione sequenziale tra le azioni basata sui fluenti
-    fluents_set = problem.ma_environment.fluents
-    to_remove = set()
-    to_remove2 = set()"""
 
 
 def remove_fluents_if_owned_by_environment(fluents, environment):
@@ -238,7 +234,6 @@ def some_comparison_function(
     )
 
     # Compare the cleaned sets of fluents for equality
-    # print("\n\n quiiiiiiiii", current_grounded_clean, next_grounded_clean, current_required_clean, next_required_clean)
     return (
         current_required_clean == next_required_clean
         and current_grounded_clean == next_grounded_clean
@@ -262,52 +257,23 @@ for i in range(len(ordered_nodes_list) - 1):
     next_action = ordered_nodes_list[i + 1] if i + 1 < len(ordered_nodes_list) else None
 
     current_inst_action = cast(InstantaneousAction, current_action.action)
-    current_required_fluents = set()
-    current_lifted_required_fluents = set()
     next_action_inst_action = cast(InstantaneousAction, next_action.action)
-    next_required_fluents = set()
-    next_lifted_required_fluents = set()
 
-    current_grounded_fluent = set()
-    next_grounded_fluent = set()
-
-    # Raccogliere fluenti richiesti dalle precondizioni delle azioni
-    for prec in current_inst_action.preconditions:
-        current_lifted_required_fluents |= fve.get(
-            eqr.remove_quantifiers(prec, problem)
-        )
-    for prec in next_action_inst_action.preconditions:
-        next_lifted_required_fluents |= fve.get(eqr.remove_quantifiers(prec, problem))
-
-    # Assegnare i parametri attuali ai fluenti sollevati
-    current_assignments_action = dict(
-        zip(current_inst_action.parameters, current_action.actual_parameters)
+    current_required_fluents, current_assignments_action = compute_required_fluents(
+        current_inst_action, current_action, problem, subs, simp, eqr, fve
     )
-    for lifted_fluent in current_lifted_required_fluents:
-        current_required_fluents |= {
-            simp.simplify(subs.substitute(lifted_fluent, current_assignments_action))
-        }
-    next_assignments_action = dict(
-        zip(next_action_inst_action.parameters, next_action.actual_parameters)
+    next_required_fluents, next_assignments_action = compute_required_fluents(
+        next_action_inst_action, next_action, problem, subs, simp, eqr, fve
     )
-    for lifted_fluent in next_lifted_required_fluents:
-        next_required_fluents |= {
-            simp.simplify(subs.substitute(lifted_fluent, next_assignments_action))
-        }
 
-    # Aggiornare i modificatori per ogni effetto dell'azione
-    for effect in current_inst_action.effects:
-        for eff in effect.expand_effect(problem):
-            current_grounded_fluent |= {
-                simp.simplify(subs.substitute(eff.fluent, current_assignments_action))
-            }
-    for effect in next_action_inst_action.effects:
-        for eff in effect.expand_effect(problem):
-            next_grounded_fluent |= {
-                simp.simplify(subs.substitute(eff.fluent, next_assignments_action))
-            }
+    current_grounded_fluent = compute_grounded_fluents(
+        current_inst_action, current_assignments_action, problem, simp, subs
+    )
+    next_grounded_fluent = compute_grounded_fluents(
+        next_action_inst_action, next_assignments_action, problem, simp, subs
+    )
 
-    # Controlliamo se le azioni corrente e successiva sono in sequenza
+    # Check if the current and next actions are in sequence
     if next_action and some_comparison_function(
         current_required_fluents,
         current_grounded_fluent,
@@ -316,35 +282,30 @@ for i in range(len(ordered_nodes_list) - 1):
         problem,
     ):
         if not in_sequence:
-            # Se non siamo in una sequenza, iniziamo una nuova sequenza con l'azione corrente
+            # If we are not in a sequence, we start a new sequence with the current action
             in_sequence = True
             current_sequence = [current_action]
         else:
-            # Se siamo già in una sequenza, aggiungiamo l'azione corrente alla sequenza
+            # If we are already in a sequence, we add the current action to the sequence
             current_sequence.append(current_action)
     else:
-        # Se la sequenza si interrompe o siamo all'ultima azione
+        # If the sequence is interrupted or we are at the last action
         if in_sequence:
-            # Se eravamo in una sequenza, aggiungiamo l'azione corrente alla sequenza
+            # If we were in a sequence, we add the current action to the sequence
             current_sequence.append(current_action)
             if next_action:
-                # Se esiste un'azione successiva, la includiamo anche nella sequenza
+                # If there is a subsequent action, we also include it in the sequence
                 current_sequence.append(next_action)
-            # Salviamo la sequenza con l'azione precedente come chiave
+            # Save the sequence with the previous action as the key
             sequenza[previous_action] = current_sequence
-            # Prepariamo per la prossima sequenza
+            # Let's prepare for the next sequence
             current_sequence = []
             in_sequence = False
-        previous_action = current_action  # Impostiamo l'azione corrente come precedente per la prossima iterazione
+        previous_action = current_action  # We set the current action as the precedent for the next iteration
 
-# Stampa o restituisci il dizionario delle sequenze
+# Print or return the sequence dictionary
 print(sequenza)
 
-
-"""current_seq = []
-for i, v in sequenza.items():
-  current_seq.append(v)
-  print(i, v)"""
 
 # *   Initialization: Sets up an empty dictionary to track sequences of actions, sorts the actions topologically from a multi-agent action plan, and establishes necessary functions for fluents manipulation and actions comparison.
 # *   Actions Iteration: Sequentially iterates through the ordered actions, determining whether each action belongs to a sequence based on its relationship with the subsequent action.
@@ -356,8 +317,6 @@ for i, v in sequenza.items():
 # * End of Sequences Handling: When a sequence ends or the last action is reached, the code saves the current sequence in the dictionary before moving to the next one or finishing if the end of the action list has been reached.
 
 ##################################I find the dependencies of concurrent actions##################################
-from unified_planning.plans.plan import ActionInstance
-from unified_planning.model.action import InstantaneousAction
 
 dipendenze_dirette = direct_dep
 nuovo_piano = {}
@@ -368,6 +327,7 @@ azioni_end = [
 
 
 def filtra_fluenti_ambientali(azione, environment):
+    """Removes environmental influences from preconditions and effects of a cloned action."""
     nuove_precondizioni = []
     nuovi_effetti = []
 
@@ -394,11 +354,13 @@ def filtra_fluenti_ambientali(azione, environment):
 
 
 def deve_essere_aggiunta(azione):
+    """Determines whether the action should be added to the new plan."""
     return azione not in sequenza.keys() and azione not in azioni_end
 
 
 # Funzione per filtrare le dipendenze
 def filtra_dipendenze(dipendenze):
+    """Remove dependencies already covered by final sequences or actions."""
     return [
         dip
         for dip in dipendenze
@@ -448,10 +410,10 @@ for azione, dipendenze in dipendenze_dirette.items():
     elif deve_essere_aggiunta(azione):
         nuovo_piano[azione] = filtra_dipendenze(dipendenze)
 
-print("Nuovo Piano:", nuovo_piano)
+print("New plan:", nuovo_piano)
 
 ################################ SequentialValidator ################################
-# Applicata Definizione 8 di:
+# Applied Definition 8 of:
 # Macros, Reactive Plans and Compact Representations-Christer Bäckström and Anders Jonssonand Peter Jonsson
 # [Articolo](https://www.researchgate.net/publication/287321934_Macros_reactive_plans_and_compact_representations)
 
@@ -470,7 +432,7 @@ class SequentialPlanValidator:
         effetti_environment = self.eff_cumulativi_environment.get("env", {})
         effetti_environment_set = set(effetti_environment.items())
 
-        # Verifica conflitti ambientali
+        # Check environmental conflicts
         if any(
             self._verifica_conflitto(
                 fluente, valore, self.precondizioni_per_agente.get(agente, {}), agente
@@ -480,7 +442,7 @@ class SequentialPlanValidator:
         ):
             return True
 
-        # Verifica conflitti per ogni agente
+        # Check for conflicts for each agent
         for agente, effetti_agente in self.eff_cumulativi_per_agente.items():
             effetti_agente_set = set(effetti_agente.items())
             if any(
@@ -500,7 +462,7 @@ class SequentialPlanValidator:
         valore_precondizione = precondizioni.get(fluente)
         if valore_precondizione is not None and valore_precondizione != valore:
             print(
-                f"Conflitto rilevato: fluente {fluente.fluent().name} per l'agente {agente}"
+                f"Conflict detected: fluent {fluente.fluent().name} for agent {agente}"
             )
             return True
         return False
@@ -511,7 +473,7 @@ class SequentialPlanValidator:
             action = actions[i]
             next_action = actions[i + 1]
 
-            # Aggiorna gli effetti per l'agente corrente
+            # Update effects for the current agent
             effetti_agente = self.eff_cumulativi_per_agente.setdefault(
                 action.agent.name, {}
             )
@@ -530,14 +492,14 @@ class SequentialPlanValidator:
                             grounded_fluent
                         ] = eff.value.bool_constant_value()
 
-            # Prepara le precondizioni per l'agente dell'azione successiva
+            # Prepare preconditions for the next action agent
             self.precondizioni_per_agente = {
                 next_action.agent.name: self._prepare_preconditions(
                     next_action, problem
                 )
             }
 
-            # Confronta gli effetti con le precondizioni dell'azione successiva
+            # Compare the effects with the preconditions of the next action
             contraddizione = self.verifica_conflitti()
             if contraddizione:
                 found_contradition = True
@@ -559,15 +521,16 @@ class SequentialPlanValidator:
                 prec_agente[grounded_fluent] = not (prec.is_not())
         return prec_agente
 
-    def _print_results(self, action, next_action, contraddizione, index):
+    def _print_results(self, action, next_action, contradiction, index):
 
-        if contraddizione:
-            print("Azione corrente: ", action)
-            print("Azione successiva: ", next_action)
-            print("Effetti cumulativi per agente: ", self.eff_cumulativi_per_agente)
-            print("Precondizioni per agente: ", self.precondizioni_per_agente)
+        if contradiction:
+            print("Current action: ", action)
+            print("Next action: ", next_action)
+            print("Cumulative effects per agent: ", self.eff_cumulativi_per_agente)
+            print("Preconditions per agent: ", self.precondizioni_per_agente)
             print(
-                f"Contraddizione tra gli effetti dell'azione {index} (agente {action.agent.name}) e le precondizioni dell'azione {index + 1} (agente {next_action.agent.name})\n"
+                f"Contradiction between the effects of action {index} (agent {action.agent.name}) "
+                f"and the preconditions of action {index + 1} (agent {next_action.agent.name})\n"
             )
 
 
@@ -627,8 +590,8 @@ def estrai_cambiamenti_fluenti_per_rm(azione_con_dipendenze, problem):
 
         # Aggiungi i cambiamenti al dizionario per RM
         cambiamenti_per_rm[inst_action.name] = {
-            "azione_corrente": cambiamenti_azione_corrente,
-            "dipendenze": cambiamenti_dipendenze,
+            "current_action": cambiamenti_azione_corrente,
+            "dependencies": cambiamenti_dipendenze,
         }
 
     return cambiamenti_per_rm
@@ -643,8 +606,8 @@ for k, v in nuovo_piano.items():
         ] = []  # Crea una nuova lista per questo agente se non esiste già
     risultati[k.agent.name].append({k: v})  # Aggiungi l'azione alla lista dell'agente
 
-# Ora risultati è un dizionario con le azioni raggruppate per agente
-# Esempio di utilizzo
+# Now results is a dictionary with actions grouped by agent.
+# Usage example
 cambiamenti_per_rm = estrai_cambiamenti_fluenti_per_rm(risultati["a2"][4], problem)
 print(cambiamenti_per_rm)
 # cambiamenti_per_rm
@@ -661,25 +624,25 @@ for j, k in risultati.items():
 
 def aggiorna_dipendenze_concurrent(acts, sequenza):
     for nome_sequenza, azioni_sequenza in sequenza.items():
-        # Mappa i nomi base delle azioni ai loro rispettivi agenti
+        # Map the base names of the actions to their respective agents
         mappa_azioni_agenti = {
             azione.action.name.split("_")[0]: azione.agent.name
             for azione in azioni_sequenza[:-1]
-        }  # Escludi l'ultima azione
+        }  # Exclude last action
 
         for agent, azioni in acts.items():
             for azione in azioni:
                 nome_azione = list(azione.keys())[0]
                 nome_base = nome_azione.split("_")[0]
 
-                # Verifica se l'azione è parte della sequenza e necessita di aggiornamento
+                # Check if the action is part of the sequence and needs to be updated
                 if nome_base in mappa_azioni_agenti and "_concurrent" in nome_azione:
-                    azione_corrente = azione[nome_azione]["azione_corrente"]
+                    azione_corrente = azione[nome_azione]["current_action"]
                     dipendenze_attuali = set(
-                        tuple(d[:2]) for d in azione[nome_azione]["dipendenze"]
+                        tuple(d[:2]) for d in azione[nome_azione]["dependencies"]
                     )
 
-                    # Verifica se nelle dipendenze sono presenti fluenti di tutti gli agenti della sequenza
+                    # Check if there are fluent dependencies of all the agents in the sequence
                     for altro_nome_base, altro_agent in mappa_azioni_agenti.items():
                         fluente_manca = all(
                             (fl[0], altro_agent) not in dipendenze_attuali
@@ -687,9 +650,9 @@ def aggiorna_dipendenze_concurrent(acts, sequenza):
                         )
                         if fluente_manca:
                             print(
-                                f"Manca un fluente di {altro_agent} nelle dipendenze di {nome_azione} di {agent}"
+                                f"A fluent is missing {altro_agent} nelle dependencies of {nome_azione} of {agent}"
                             )
-                            # Aggiungi i fluenti mancanti alle dipendenze
+                            # Add missing fluents to dependencies
                             for azione_altra in acts[altro_agent]:
                                 if (
                                     list(azione_altra.keys())[0]
@@ -697,7 +660,7 @@ def aggiorna_dipendenze_concurrent(acts, sequenza):
                                 ):
                                     for fluente in azione_altra[
                                         altro_nome_base + "_concurrent"
-                                    ]["azione_corrente"]:
+                                    ]["current_action"]:
                                         if fluente[2] == False:
                                             nuovo_fluente = (
                                                 fluente[0],
@@ -709,7 +672,7 @@ def aggiorna_dipendenze_concurrent(acts, sequenza):
                                                 nuovo_fluente[1],
                                             ) not in dipendenze_attuali:
                                                 azione[nome_azione][
-                                                    "dipendenze"
+                                                    "dependencies"
                                                 ].append(nuovo_fluente)
 
     return acts
@@ -736,24 +699,24 @@ for agent, actions in nuvo_dic.items():
 
     for i, action in enumerate(actions):
         action_key = list(action.keys())[0]  # Ottieni il nome dell'azione
-        action_fluents = action[action_key]["azione_corrente"]
-        dependencies = action[action_key]["dipendenze"]
+        action_fluents = action[action_key]["current_action"]
+        dependencies = action[action_key]["dependencies"]
 
-        # Se l'azione è concorrente e la prima dell'agente
+        # If the action is concurrent and the first of the agent
         if "_concurrent" in action_key and i == 0:
-            # Usa le dipendenze dell'azione come condizione per la transizione da state1 a state1X
+            # Use action dependencies as a condition for transitioning from state1 to state1X
             condition_for_state1X = tuple(
                 (fluent, value)
                 for fluent, agent_id, value in dependencies
                 if agent_id == agent
             )
-            # Aggiungi la transizione da state1 a state1X
+            # Add transition from state1 to state1X
             transitions[(current_state, condition_for_state1X)] = ("state1X", reward)
             current_state = "state1X"
             reward += 10
 
         if "_concurrent" not in action_key:
-            # Azioni non concorrenti
+            # Non-competing actions
             condition = tuple(
                 (fluent, value) if agent_id != agent else (fluent, value)
                 for fluent, agent_id, value in action_fluents
@@ -767,7 +730,7 @@ for agent, actions in nuvo_dic.items():
             transitions[(current_state, condition)] = (next_state, reward)
             current_state = next_state
         else:
-            # Azioni concorrenti
+            # Competing actions
             dependency_condition = tuple(
                 ((agent_id, fluent), value) if agent_id != agent else (fluent, value)
                 for fluent, agent_id, value in dependencies
@@ -791,13 +754,11 @@ for agent, actions in nuvo_dic.items():
     RM_dict[agent] = transitions
 
 
-# print(transitions)
-# transitions
-# RM_dict
 print("\n\n\n", RM_dict)
 
 
 def rimuovi_fluenti_falsi(RM_dict):
+    """Scarta le condizioni con valore booleano falso dalle transizioni."""
     RM_dict_pulito = {}
     for agente, transizioni in RM_dict.items():
         transizioni_pulite = {}
@@ -805,13 +766,13 @@ def rimuovi_fluenti_falsi(RM_dict):
             stato_successivo,
             ricompensa,
         ) in transizioni.items():
-            # Filtra le condizioni per mantenere solo quelle vere
+            # Filter the conditions to keep only the true ones
             condizioni_vere = tuple(
                 condizione for condizione in condizioni if condizione[1]
             )
             if (
                 condizioni_vere
-            ):  # Se ci sono condizioni vere, aggiungile alle transizioni
+            ):  # If there are true conditions, add them to the transitions
                 transizioni_pulite[(stato_corrente, condizioni_vere)] = (
                     stato_successivo,
                     ricompensa,
@@ -820,11 +781,12 @@ def rimuovi_fluenti_falsi(RM_dict):
     return RM_dict_pulito
 
 
-# Applica la funzione a RM_dict
+# Apply the function to RM_dict
 RM_dict_true = rimuovi_fluenti_falsi(RM_dict)
 
 
 def rm_concurrent_sequence(rm_dictionary):
+    """Stores transactions related to concurrent states and those immediately following them."""
     new_dict = {}
     for agent, transitions in rm_dictionary.items():
         new_transitions = {}
@@ -834,77 +796,22 @@ def rm_concurrent_sequence(rm_dictionary):
         for index, ((current_state, conditions), (next_state, reward)) in enumerate(
             transitions_list
         ):
-            # Se lo stato corrente termina con 'X', aggiungi la transizione e segna che abbiamo trovato uno stato 'X'
+            # If the current state ends with 'X', add the transition and mark that we found a state 'X'
             if "X" in current_state:
                 new_transitions[(current_state, conditions)] = (next_state, reward)
                 x_state_found = True
-            # Se abbiamo trovato uno stato 'X' e questa è la transizione immediatamente successiva, aggiungila
+            # If we found a state 'X' and this is the immediately following transition, add it
             elif x_state_found:
                 new_transitions[(current_state, conditions)] = (next_state, reward)
                 x_state_found = False  # Resetta il flag dopo aver aggiunto la transizione successiva
-            # Se lo stato successivo termina con 'X', aggiungi la transizione e segna che abbiamo trovato uno stato 'X'
+            # If the next state ends with 'X', add the transition and mark that we have found a state 'X'
             elif "X" in next_state:
                 new_transitions[(current_state, conditions)] = (next_state, reward)
                 x_state_found = True
 
-        # Aggiungi le nuove transizioni filtrate per l'agente corrente al nuovo dizionario
+        # Add the new filtered transitions for the current agent to the new dictionary
         new_dict[agent] = new_transitions
     return new_dict
 
 
 RM_dict_true_seq = rm_concurrent_sequence(RM_dict_true)
-# Supponendo che RM_dict_true_seq sia il dizionario che vuoi modificare
-
-"""# Per ogni agente in RM_dict_true_seq
-for agent, transitions in RM_dict_true_seq.items():
-    # Prima, troviamo gli agenti con cui l'agente corrente ha interagito nello stato X
-    agents_involved = set()
-    for (from_state, conditions), (to_state, reward) in transitions.items():
-        if 'X' in from_state:
-            # Questo è lo stato concorrente
-            for condition in conditions:
-                if isinstance(condition[0], tuple) and condition[0][0] != agent:
-                    # Questa è una condizione che coinvolge un altro agente
-                    agents_involved.add(condition[0][0])
-
-    # Ora, modifichiamo l'ultima transizione
-    # Troviamo lo stato finale (quello che non appare mai come from_state)
-    from_states = set()
-    to_states = set()
-    for (from_state, conditions), (to_state, reward) in transitions.items():
-        from_states.add(from_state)
-        to_states.add(to_state)
-    final_states = to_states - from_states
-    if len(final_states) != 1:
-        print(f"Attenzione: L'agente {agent} ha stati finali multipli: {final_states}")
-        continue
-    final_state = final_states.pop()
-    # Troviamo la transizione che porta allo stato finale
-    transitions_to_final = [((from_state, conditions), (to_state, reward)) for ((from_state, conditions), (to_state, reward)) in transitions.items() if to_state == final_state]
-    if len(transitions_to_final) != 1:
-        print(f"Attenzione: L'agente {agent} ha transizioni multiple verso lo stato finale")
-        continue
-    ((from_state, conditions), (to_state, reward)) = transitions_to_final[0]
-    # Ora, modifichiamo le condizioni per aggiungere le condizioni che gli altri agenti sono nello stesso stato finale
-    # Troviamo la condizione di posizione dell'agente corrente
-    agent_pos_conditions = [cond for cond in conditions if not isinstance(cond[0], tuple) and 'pos(' in str(cond[0])]
-    if not agent_pos_conditions:
-        print(f"L'agente {agent} non ha una propria posizione nelle condizioni")
-        continue
-    agent_pos_condition = agent_pos_conditions[0]
-    # Otteniamo la posizione (es. 'pos(l14)')
-    agent_position = agent_pos_condition[0]
-    # Ora, per ogni altro agente, aggiungiamo una condizione che l'altro agente sia nella stessa posizione
-    new_conditions = list(conditions)
-    for other_agent in agents_involved:
-        other_agent_pos_condition = ((other_agent, agent_position), True)
-        if other_agent_pos_condition not in new_conditions:
-            new_conditions.append(other_agent_pos_condition)
-    # Aggiorniamo la transizione
-    # Rimuoviamo la vecchia transizione
-    transitions.pop((from_state, conditions))
-    # Aggiungiamo la nuova transizione
-    transitions[(from_state, tuple(new_conditions))] = (to_state, reward)"""
-
-# Ora, RM_dict_true_seq è stato aggiornato con le nuove condizioni
-# breakpoint()
