@@ -26,6 +26,31 @@ This repository provides the **MAPRL library** that performs POP→RM synthesis 
 
 ---
 
+## Planning pipeline in MAPRL
+
+The “planning” side of MAPRL is implemented using the multi-agent extension of [Unified Planning](https://github.com/aiplan4eu/unified-planning):
+
+- For each domain (maze, office world, temple quest) we define a **`MultiAgentProblem`** with:
+  - high-level public actions (e.g., `move`, `start_open_employer_door`, `push_button`),
+  - shared environment fluents (e.g., room connectivity, door status, buttons),
+  - and a joint goal (e.g., all agents reaching a target room while the system is “free”).
+
+- This planning model is exported to **MA-PDDL** and solved with **FMAP**, which returns a **partial-order plan (POP)** capturing causal and concurrency constraints between joint actions.
+
+- MAPRL then **compiles the POP into one Reward Machine per agent**:
+  - each RM encodes that agent’s sequence of high-level responsibilities (doors to open, buttons to press, rooms to reach),
+  - and is later used to guide QRM during learning.
+
+The scripts that build and solve the planning models, and that turn POPs into RMs, live under:
+
+```text
+multiagentplanning_rl/environments/integration_planning_and_learning/planning_utils/
+
+```
+
+Most users will just run the provided experiments (which load pre-generated POP→RM artifacts), but the full planning pipeline is available if you want to regenerate or modify the tasks.
+
+
 ## Project Structure
 
 ### Main components
@@ -38,7 +63,7 @@ This repository provides the **MAPRL library** that performs POP→RM synthesis 
 
 ### Files and directories
 
-- `multiagentplanning_rl/environments/integration_planning_and_learning/` — shared environment utilities, per-experiment configs, and planning helpers under `planning_utils/`.
+- `multiagentplanning_rl/environments/integration_planning_and_learning/` — shared environment utilities, per-experiment configs, and the Unified Planning + FMAP pipeline under `planning_utils/` (MAP → POP → per-agent RMs).
 - `concurrent_maze/maze_main.py` — entry point for the maze tasks.
 - `concurrent_office_world/office_world_main.py` — entry point for the office world tasks.
 - `concurrent_temple_quest/temple_quest_main.py` — entry point for the temple quest tasks.

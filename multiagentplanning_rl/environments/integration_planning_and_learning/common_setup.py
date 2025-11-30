@@ -1,7 +1,3 @@
-Nuovo
-+95
--0
-
 """Shared helpers for environment setup across concurrent scenarios."""
 
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
