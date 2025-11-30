@@ -1,4 +1,4 @@
-from multiagentplanning_rl.multi_agent.state_encoder import StateEncoder
+from multiagent_rlrm.multi_agent.state_encoder import StateEncoder
 
 
 class StateEncoderMAPRL(StateEncoder):

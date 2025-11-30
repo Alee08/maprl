@@ -31,14 +31,14 @@ This repository provides the **MAPRL library** that performs POP→RM synthesis 
 ### Main components
 
 - `multiagentplanning_rl/multi_agent/reward_machine.py` — RM semantics shared by all environments.
-- `multiagentplanning_rl/environments/integration_planing_and_learning/ma_environment.py` — base environment that wires POP artifacts, agents, and RMs.
+- `multiagentplanning_rl/environments/integration_planning_and_learning/ma_environment.py` — base environment that wires POP artifacts, agents, and RMs.
 - `multiagentplanning_rl/multi_agent/wrappers/rm_environment_wrapper.py` — observation wrapper adding RM state to the agents.
 - `multiagentplanning_rl/render/render.py` — optional Pygame renderer for grid maps, agents, and interactable objects.
 - `multiagentplanning_rl/utils/` — helper utilities for grounding, RM simplification, state evaluation, and sequential simulation.
 
 ### Files and directories
 
-- `multiagentplanning_rl/environments/integration_planing_and_learning/` — shared environment utilities, per-experiment configs, and planning helpers under `planning_utils/`.
+- `multiagentplanning_rl/environments/integration_planning_and_learning/` — shared environment utilities, per-experiment configs, and planning helpers under `planning_utils/`.
 - `concurrent_maze/maze_main.py` — entry point for the maze tasks.
 - `concurrent_office_world/office_world_main.py` — entry point for the office world tasks.
 - `concurrent_temple_quest/temple_quest_main.py` — entry point for the temple quest tasks.
@@ -77,6 +77,10 @@ All three environments share the same CLI contract:
 
 - `--num_episodes` (default `20000`) — length of the training loop.  
 - `--wandb_enabled` — opt-in Weights & Biases logging (off by default).
+- `--experiment` (`exp1`, `exp2`, or `exp3`) — selects the task variant for the chosen domain.
+
+Each domain (maze, office world, and temple quest) defines three predefined experiments: `exp1`, `exp2`, and `exp3` (see the paper for the exact setup of each variant).
+
 
 Run each experiment after `pip install -e .`.  
 The most direct approach is to `cd` into the folder that contains the entry point and execute the script (e.g., `python office_world_main.py`).  
@@ -85,20 +89,20 @@ If you prefer, you can stay at the repo root and call the module with `python -m
 ### Office World
 
 ```bash
-cd multiagentplanning_rl/environments/integration_planing_and_learning/concurrent_office_world
-python office_world_main.py --num_episodes 20000 --wandb_enabled
+cd multiagentplanning_rl/environments/integration_planning_and_learning/concurrent_office_world
+python office_world_main.py --num_episodes 20000 --experiment exp1 --wandb_enabled
 ```
 
 ### Maze
 ```bash
-cd multiagentplanning_rl/environments/integration_planing_and_learning/concurrent_maze
-python maze_main.py --num_episodes 20000 --wandb_enabled
+cd multiagentplanning_rl/environments/integration_planning_and_learning/concurrent_maze
+python maze_main.py --num_episodes 20000 --experiment exp1 --wandb_enabled
 ```
 
 ### Temple Quest
 ```bash
-cd multiagentplanning_rl/environments/integration_planing_and_learning/concurrent_temple_quest
-python temple_quest_main.py --num_episodes 20000 --wandb_enabled
+cd multiagentplanning_rl/environments/integration_planning_and_learning/concurrent_temple_quest
+python temple_quest_main.py --num_episodes 20000 --experiment exp1 --wandb_enabled
 ```
 
 Each entry point runs its predefined scenario without extra flags; drop `--wandb_enabled` if you do not want to send metrics to W&B.
@@ -115,11 +119,11 @@ The environment is defined using a grid-like structure with various objects such
 - ✉️ - Letter
 - `A`, `B`, `C`, `O` etc. - Indicate specific goal locations
 
-The positions and connections of the grid are parsed using custom parsing functions, such as `parse_office_world`.
+The positions and connections of the grid are parsed using custom parsing functions, such as `parse_office_world_`.
 
 ## Example Map (Office World)
 
-Below is an example of a grid environment used in the project: 
+Below is the emoji-based map used in `office_world_main.py` (parsed into rooms, doors, walls, and goal locations):
 ```python
 map_1 = """
  B  🟩 🟩 ⛔ 🟩 🥤 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
@@ -144,11 +148,31 @@ map_1 = """
 
 The agents can perform various actions, including:
 
-- `move_up`, `move_down`, `move_left`, `move_right` - Move within the grid.
-- `cross_up`, `cross_down`, `cross_left`, `cross_right` - Cross to adjacent locations using bridges.
-- `row_up`, `row_down`, `row_left`, `row_right` - Row across to different locations using boats.
-- `low_up`, `low_down`, `low_left`, `low_right` - Move within sub-cells of a grid cell.
+- `up`, `down`, `left`, `right` – Move between rooms.
+- `cross_door_up`, `cross_door_down`, `cross_door_left`, `cross_door_right` - Cross the employee's door.
+- `manager_door_up`, `manager_door_down`, `manager_door_left`, `manager_door_right` - Cross the manager's door.
+- `cell_up`, `cell_down`, `cell_left`, `cell_right` - Move within cells of rooms.
 - `wait` - Stay in the current position.
+
+
+## Quickstart (library usage)
+
+You can also use MAPRL as a Python library to build your own experiments:
+
+```python
+from multiagentplanning_rl.environments.integration_planning_and_learning.ma_environment import MAP_RL_Env
+from multiagentplanning_rl.multi_agent.wrappers.rm_environment_wrapper import RMEnvironmentWrapper
+
+env = MAP_RL_Env(width=4, height=4, walls=..., plant=..., cell_size=3)
+rm_env = RMEnvironmentWrapper(env, agents=[...])
+
+obs, infos = rm_env.reset()
+for _ in range(100):
+    actions = {ag.name: ag.sample_action(obs[ag.name]) for ag in rm_env.agents}
+    obs, rewards, done, trunc, infos = rm_env.step(actions)
+    if all(done.values()):
+        break
+```
 
 ## Citing MAPRL
 
@@ -170,3 +194,9 @@ If you use this code or ideas from the paper, please cite:
   year      = {2025},
   doi       = {10.3233/FAIA251253},
 }
+```
+
+## License
+
+MAPRL is released under the **Apache 2.0 License**.  
+See the `LICENSE` file for details.

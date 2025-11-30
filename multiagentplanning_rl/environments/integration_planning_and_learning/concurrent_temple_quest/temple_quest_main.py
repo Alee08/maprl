@@ -1,68 +1,88 @@
+import copy
+import functools
+import pygame
 from multiagent_rlrm.learning_algorithms.qlearning import QLearning
 from multiagentplanning_rl.multi_agent.reward_machine import RewardMachine
 from unified_planning.shortcuts import *
 from multiagentplanning_rl.environments.utils_envs.evaluation_metrics import *
 import json
-from multiagentplanning_rl.environments.integration_planing_and_learning.building_rm import (
-    load_plan_and_problem,
-    build_reward_machine,
-)
 from multiagentplanning_rl.utils.message import Message
-from multiagentplanning_rl.environments.integration_planing_and_learning.ma_environment import (
+from multiagentplanning_rl.environments.integration_planning_and_learning.ma_environment import (
     MAP_RL_Env,
 )
 from multiagentplanning_rl.render.render import EnvironmentRenderer
-from multiagentplanning_rl.environments.integration_planing_and_learning.state_encoder import (
+from multiagentplanning_rl.environments.integration_planning_and_learning.state_encoder import (
     StateEncoderMAPRL,
 )
-from multiagentplanning_rl.environments.integration_planing_and_learning.detect_event import (
+from multiagentplanning_rl.environments.integration_planning_and_learning.detect_event_2 import (
     PositionEventDetector,
 )
 from multiagentplanning_rl.multi_agent.wrappers.rm_environment_wrapper import (
     RMEnvironmentWrapper,
 )
 import wandb
+
+# from heatmap import generate_heatmaps
+# from multiagentplanning_rl.render.heatmap import generate_heatmaps
+import string
+from multiagent_rlrm.multi_agent.action_rl import ActionRL
 import logging
 import argparse
 
 logging.basicConfig(level=logging.INFO)
 
-pop_plan, problem = load_plan_and_problem(
-    "../planning_utils/result_office_5_agents.pkl",
-    "../planning_utils/problem_office_5_agents.pkl",
-)
-reward_machine_dict = build_reward_machine(pop_plan, problem)
-RM_dict_true_seq = reward_machine_dict["RM_dict_true_seq"]
+
 NUM_EPISODES = 20000  # Number of episodes to play for learning
 # wandb.init(project="maze_RL_new", entity="alee8", mode="disabled")
 
-map_1 = """
- B  🟩 🟩 ⛔ 🟩 🥤 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
- 🟩 🟩 🟩 🚪 🟩 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🟩 🟩
- 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ O  🪴 🟩
- ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪
- 🟩 🟩 🟩 ⛔ ✉️ 🪴 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
- 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🪴 🪴 🟩 🚪 🟩 🪴 🪴
- 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
- ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪
- 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩
- 🟩 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩
- 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🥤 🟩 🟩 ⛔ 🟩 🟩 🟩
- 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔
- 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
- 🟩 A  🟩 ⛔ 🪴 🪴 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩
- 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 C
+map_3 = """
+ D  🟩 🟩 ⛔ 🟩 🥤 🪴 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🪴 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🟩 🥤
+ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🪴 🪴 🟩 ⛔ 🟩 🪴 🪴
+ 🪴 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🪴
+ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 
+ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 🚪 🟩 🪴 🟩 ⛔ 🪴 🟩 🟩 🚪 🟩 🪴 🪴 
+ 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🪴 🪴 🟩 🚪 🟩 🪴 🪴 ⛔ 🪴 🟩 🪴 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 
+ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🪴 🚪 🪴 🟩 🟩 ⛔ 🟩 🟩 🟩 
+ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ 
+ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🪴 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 
+ 🟩 🪴 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🟩 🟩 🪴 ⛔ 🟩 🟩 🟩 ⛔ B  🟩 🪴 ⛔ 🟩 🪴 🟩 
+ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🪴 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🪴 ⛔ 🟩 🟩 🪴 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 
+ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔
+ 🟩 🪴 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 
+ 🟩 🪴 🟩 ⛔ 🪴 🪴 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🟩 🟩 
+ ✉️ 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 
+ ⛔ ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 
+ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🟩 🟩
+ 🪴 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🪴
+ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ O  🪴 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🪴 🪴 🟩 ⛔ 🟩 🪴 🪴
+ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 
+ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🪴 🟩 🟩 🚪 🟩 🪴 🪴 
+ 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🪴 🪴 🟩 🚪 🟩 🪴 🪴 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 
+ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🪴 🚪 🟩 🟩 🪴 ⛔ 🟩 🟩 🟩 
+ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ 
+ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🪴 🟩 ✉️ 
+ 🪴 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🟩 🪴 
+ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🪴 🟩 🟩 
+ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ ⛔ 
+ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🪴 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🪴 
+ 🟩 A  🟩 ⛔ 🪴 🪴 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🪴 🟩 ⛔ 🟩 🟩 🪴 
+ 🪴 🟩 🟩 ⛔ 🟩 🟩 🥤 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 C  ⛔ 🪴 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🪴 ✉️ 🪴 
  """
 
-MAP = map_1
-grid_height, grid_width = (4, 4)
+# walls, goals = parse_map_emoji(map_maze)
+# coordinates, goals, office_walls = parse_office_world(map_1)
+MAPS = {"large": map_3}
+MAP_SELECTION = "large"
+MAP = MAPS[MAP_SELECTION]
 
+GRID_DIMENSIONS = {"large": (8, 8, 8), "small": (4, 4, 4)}
+grid_height, grid_width, grid_size = GRID_DIMENSIONS[MAP_SELECTION]
 # Parse the map
 coordinates_obj, goals, walls, rooms, _connections = parse_office_world_(MAP)
 
 
 def build_object_positions(coordinates, walls, extra=None):
-    """Assembles base object positions and optionally merges additional items."""
+    """Compose default object positions and optionally merge custom ones."""
     base_positions = {
         "plant": coordinates["plant"],
         "coffee": coordinates["coffee"],
@@ -79,7 +99,7 @@ def build_object_positions(coordinates, walls, extra=None):
 object_positions = build_object_positions(
     coordinates_obj,
     walls,
-    extra={"doors": [], "manager_doors": []},
+    extra={"bridges": [], "boats": []},
 )
 
 
@@ -133,6 +153,55 @@ renderer = EnvironmentRenderer(
     goals=goals,
     cell_size=100,  # Room size in pixels
     in_cell_size=env.cell_size,  # Number of subcells per dimension within the room
+    resource_overrides={
+        "plant": lambda renderer: (
+            "img/buco_lab.png",
+            (renderer.inner_cell_size, renderer.inner_cell_size),
+        ),
+        "coffee": lambda renderer: (
+            "img/key_2.png",
+            (renderer.inner_cell_size - 6, renderer.inner_cell_size - 6),
+        ),
+        "letter": lambda renderer: (
+            "img/tesoro.png",
+            (renderer.inner_cell_size - 3, renderer.inner_cell_size - 3),
+        ),
+        "bridge_image": lambda renderer: ("img/carrucola.png", (40, 40)),
+        "rowboat": lambda renderer: ("img/masso.png", (40, 40)),
+    },
+    agent_image_map=lambda renderer: {
+        "a1": (
+            "img/ita_man.png",
+            (renderer.inner_cell_size, renderer.inner_cell_size),
+        ),
+        "a2": ("img/juve.png", (renderer.inner_cell_size, renderer.inner_cell_size)),
+        "a3": (
+            "img/bcn_man2.png",
+            (renderer.inner_cell_size, renderer.inner_cell_size),
+        ),
+        "a4": ("img/CR7.png", (renderer.inner_cell_size, renderer.inner_cell_size)),
+        "a5": ("img/juve.png", (renderer.inner_cell_size, renderer.inner_cell_size)),
+        "a6": (
+            "img/we.png",
+            (renderer.inner_cell_size - 5, renderer.inner_cell_size - 5),
+        ),
+        "a7": (
+            "img/o.png",
+            (renderer.inner_cell_size - 5, renderer.inner_cell_size - 5),
+        ),
+        "a8": (
+            "img/o.png",
+            (renderer.inner_cell_size - 5, renderer.inner_cell_size - 5),
+        ),
+        "a9": (
+            "img/o.png",
+            (renderer.inner_cell_size - 5, renderer.inner_cell_size - 5),
+        ),
+        "a10": (
+            "img/we.png",
+            (renderer.inner_cell_size - 5, renderer.inner_cell_size - 5),
+        ),
+    },
 )
 renderer.init_pygame()
 
@@ -142,19 +211,21 @@ a3 = AgentRL("a3", env)
 a4 = AgentRL("a4", env)
 a5 = AgentRL("a5", env)
 
-AGENT_ORDER = [
-    ("a1", a1),
-    ("a2", a2),
-    ("a3", a3),
-    ("a4", a4),
-    ("a5", a5),
-]
-AGENTS_BY_LABEL = dict(AGENT_ORDER)
+a6 = AgentRL("a6", env)
+a7 = AgentRL("a7", env)
+a8 = AgentRL("a8", env)
+a9 = AgentRL("a9", env)
+a10 = AgentRL("a10", env)
+
+ALL_AGENTS = [a1, a2, a3, a4, a5, a6, a7, a8, a9, a10]
+AGENT_ORDER = [agent.name for agent in ALL_AGENTS]
+AGENTS_BY_LABEL = {agent.name: agent for agent in ALL_AGENTS}
 
 Location = UserType("Location")
 max_x_value = env.grid_width
 max_y_value = env.grid_height
 
+# prova:
 l11 = Object("l11", Location)
 l12 = Object("l12", Location)
 l13 = Object("l13", Location)
@@ -265,7 +336,7 @@ def create_cell_connections(connections, env):
     # Create the is_connected fluent
     is_connected = Fluent("is_connected", BoolType(), l1=Location, l2=Location)
 
-    # Set up the connections
+    # Configure the connections
     for room_name, connected_rooms in connections.items():
         for connected_room in connected_rooms:
             # Set the initial value of the connection
@@ -275,7 +346,7 @@ def create_cell_connections(connections, env):
                 ),
                 True,
             )
-            # Set up the bidirectional connection
+            # Ensure the connection is bidirectional
             env.set_initial_value(
                 is_connected(
                     location_objects[connected_room], location_objects[room_name]
@@ -307,7 +378,7 @@ def create_wall_connections(walls, env):
     # Create the is_wall fluent
     is_wall = Fluent("is_wall", BoolType(), l1=Location, l2=Location)
 
-    # Set the walls
+    # Configure the walls
     for wall_pair in walls:
         coord1_name = f"({wall_pair[0][0]},{wall_pair[0][1]})"
         coord2_name = f"({wall_pair[1][0]},{wall_pair[1][1]})"
@@ -316,7 +387,7 @@ def create_wall_connections(walls, env):
             is_wall(location_objects[coord1_name], location_objects[coord2_name]),
             True,
         )
-        # Create the bidirectional wall
+        # Make the wall bidirectional
         env.set_initial_value(
             is_wall(location_objects[coord2_name], location_objects[coord1_name]),
             True,
@@ -342,37 +413,37 @@ def test_policy(rm_env, episode, play=False):
     else:
         num_test_episodes = 1
     (
-        success_rate_per_agente,
+        success_rate_per_agent,
         _,
         average_timesteps,
-        avg_reward_per_agente,
-        avg_arps_per_agente,
+        avg_reward_per_agent,
+        avg_arps_per_agent,
     ) = test_policy_optima_MAPRL(
         rm_env, episodi_test=num_test_episodes, optimal_steps=29, gamma=0.9
     )
 
-    for _, rewag in success_rate_per_agente.items():
+    for _, rewag in success_rate_per_agent.items():
         if rewag > 0:
             logging.info(
-                f"[{episode}] Test success rate: {success_rate_per_agente} - avg timesteps {average_timesteps} - avg reward {avg_reward_per_agente} - avg arps {avg_arps_per_agente}"
+                f"[{episode}] Test success rate: {success_rate_per_agent} - avg timesteps {average_timesteps} - avg reward {avg_reward_per_agent} - avg arps {avg_arps_per_agent}"
             )
 
-    # If we are not in play mode, log the data to wandb
+    # Se non siamo in modalità play, logghiamo i dati su wandb
     if not play:
-        for ag_name, arps in avg_arps_per_agente.items():
+        for ag_name, arps in avg_arps_per_agent.items():
             log_data[f"avg_arps_{ag_name}"] = arps
 
-        for ag_name, success_rate in success_rate_per_agente.items():
+        for ag_name, success_rate in success_rate_per_agent.items():
             log_data[f"success_rate_optima_{ag_name}"] = success_rate
 
-        for ag_name, avg_reward in avg_reward_per_agente.items():
+        for ag_name, avg_reward in avg_reward_per_agent.items():
             log_data[f"avg_reward_optima_{ag_name}"] = avg_reward
 
         log_data["average_timesteps"] = average_timesteps
 
         wandb.log(log_data, step=episode)
 
-    return success_rate_per_agente, average_timesteps
+    return success_rate_per_agent, average_timesteps
 
 
 def initialize_experiment_metrics(agents):
@@ -382,15 +453,15 @@ def initialize_experiment_metrics(agents):
     :param agents: List of agents in the environment
     :return: Initialized dictionaries for tracking metrics
     """
-    successi_per_agente = {agent.name: 0 for agent in agents}
-    ricompense_per_episodio = {agent.name: [] for agent in agents}
+    success_per_agent = {agent.name: 0 for agent in agents}
+    rewards_per_episode = {agent.name: [] for agent in agents}
     actions_log = {agent.name: [] for agent in agents}
-    finestra_media_mobile = 1000
+    moving_average_window = 1000
     return (
-        successi_per_agente,
-        ricompense_per_episodio,
+        success_per_agent,
+        rewards_per_episode,
         actions_log,
-        finestra_media_mobile,
+        moving_average_window,
     )
 
 
@@ -398,9 +469,9 @@ def log_wandb_data(
     rm_env,
     episode,
     rewards_agents,
-    successi_per_agente,
-    ricompense_per_episodio,
-    finestra_media_mobile,
+    success_per_agent,
+    rewards_per_episode,
+    moving_average_window,
     total_step,
     training_steps,
 ):
@@ -410,18 +481,18 @@ def log_wandb_data(
     :param rm_env: The Reward Machine environment instance
     :param episode: The current episode number
     :param rewards_agents: Rewards obtained by each agent
-    :param successi_per_agente: Success count per agent
-    :param ricompense_per_episodio: Rewards per episode
-    :param finestra_media_mobile: Moving average window size
+    :param success_per_agent: Success count per agent
+    :param rewards_per_episode: Rewards per episode
+    :param moving_average_window: Moving average window size
     :param total_step: Total steps taken in the current run
     """
     log_data = prepare_log_data(
         rm_env.env,
         episode,
         rewards_agents,
-        successi_per_agente,
-        ricompense_per_episodio,
-        finestra_media_mobile,
+        success_per_agent,
+        rewards_per_episode,
+        moving_average_window,
     )
     log_data.update(
         {
@@ -434,7 +505,7 @@ def log_wandb_data(
 
 
 # Example usage with a 4x4 grid (rooms)
-grid_size = 4
+
 locations, coordinates = generate_grid_locations_and_coordinates(grid_size)
 env.add_objects(locations)
 connections_ = connect_locations(locations, grid_size)
@@ -470,6 +541,11 @@ a2.add_to_state("timestep", 0)
 a3.add_to_state("timestep", 0)
 a4.add_to_state("timestep", 0)
 a5.add_to_state("timestep", 0)
+a6.add_to_state("timestep", 0)
+a7.add_to_state("timestep", 0)
+a8.add_to_state("timestep", 0)
+a9.add_to_state("timestep", 0)
+a10.add_to_state("timestep", 0)
 
 a1.add_public_fluent(pos_i)
 a1.add_public_fluent(pos_j)
@@ -482,6 +558,9 @@ env.set_initial_value(Dot(a1, pos_x), 3)  # 83
 env.set_initial_value(Dot(a1, pos_y), 0)
 env.set_initial_value(Dot(a1, pos_i), 0)  # 83
 env.set_initial_value(Dot(a1, pos_j), 0)
+# a1.set_initial_position_i_j(0, 0)
+# env.set_initial_value(Dot(a1, pos(l33)), False)
+# env.set_initial_value(Dot(a1, pos(l34)), True)
 
 a2.add_public_fluent(pos_x)
 a2.add_public_fluent(pos_y)
@@ -494,6 +573,7 @@ env.set_initial_value(Dot(a2, pos_x), 2)  # 77
 env.set_initial_value(Dot(a2, pos_y), 2)
 env.set_initial_value(Dot(a2, pos_i), 0)  # 83
 env.set_initial_value(Dot(a2, pos_j), 0)
+# a2.set_initial_position_i_j(0, 0)
 
 a3.add_public_fluent(pos_x)
 a3.add_public_fluent(pos_y)
@@ -506,6 +586,9 @@ env.set_initial_value(Dot(a3, pos_x), 1)  # 10
 env.set_initial_value(Dot(a3, pos_y), 0)
 env.set_initial_value(Dot(a3, pos_i), 0)  # 83
 env.set_initial_value(Dot(a3, pos_j), 0)
+# a3.set_initial_position_i_j(0, 0)
+# env.set_initial_value(Dot(a3, pos(l34)), True)
+# env.set_initial_value(Dot(a3, pos(l33)), False)
 
 a4.add_public_fluent(pos_x)
 a4.add_public_fluent(pos_y)
@@ -518,6 +601,7 @@ env.set_initial_value(Dot(a4, pos_x), 0)  # 00
 env.set_initial_value(Dot(a4, pos_y), 0)
 env.set_initial_value(Dot(a4, pos_i), 0)
 env.set_initial_value(Dot(a4, pos_j), 0)
+# a4.set_initial_position_i_j(0, 0)
 
 a5.add_public_fluent(pos_x)
 a5.add_public_fluent(pos_y)
@@ -530,54 +614,166 @@ env.set_initial_value(Dot(a5, pos_x), 1)  # 98
 env.set_initial_value(Dot(a5, pos_y), 3)
 env.set_initial_value(Dot(a5, pos_i), 0)  # 83
 env.set_initial_value(Dot(a5, pos_j), 0)
+# a5.set_initial_position_i_j(0, 0)
+
+a6.add_public_fluent(pos_x)
+a6.add_public_fluent(pos_y)
+a6.add_public_fluent(pos, default_initial_value=False)
+a6.add_state_encoder(StateEncoderMAPRL(a6))
+a6.add_public_fluent(pos_i)
+a6.add_public_fluent(pos_j)
+env.add_agent(a6)
+env.set_initial_value(Dot(a6, pos_x), 7)  # 98
+env.set_initial_value(Dot(a6, pos_y), 0)
+env.set_initial_value(Dot(a6, pos_i), 0)  # 83
+env.set_initial_value(Dot(a6, pos_j), 0)
+# a5.set_initial_position_i_j(0, 0)
+
+a7.add_public_fluent(pos_x)
+a7.add_public_fluent(pos_y)
+a7.add_public_fluent(pos, default_initial_value=False)
+a7.add_state_encoder(StateEncoderMAPRL(a7))
+a7.add_public_fluent(pos_i)
+a7.add_public_fluent(pos_j)
+env.add_agent(a7)
+env.set_initial_value(Dot(a7, pos_x), 1)  # 98
+env.set_initial_value(Dot(a7, pos_y), 6)
+env.set_initial_value(Dot(a7, pos_i), 0)  # 83
+env.set_initial_value(Dot(a7, pos_j), 0)
+# a5.set_initial_position_i_j(0, 0)
+
+a8.add_public_fluent(pos_x)
+a8.add_public_fluent(pos_y)
+a8.add_public_fluent(pos, default_initial_value=False)
+a8.add_state_encoder(StateEncoderMAPRL(a8))
+a8.add_public_fluent(pos_i)
+a8.add_public_fluent(pos_j)
+env.add_agent(a8)
+env.set_initial_value(Dot(a8, pos_x), 5)  # 98
+env.set_initial_value(Dot(a8, pos_y), 2)
+env.set_initial_value(Dot(a8, pos_i), 0)  # 83
+env.set_initial_value(Dot(a8, pos_j), 0)
+# a5.set_initial_position_i_j(0, 0)
+
+a9.add_public_fluent(pos_x)
+a9.add_public_fluent(pos_y)
+a9.add_public_fluent(pos, default_initial_value=False)
+a9.add_state_encoder(StateEncoderMAPRL(a9))
+a9.add_public_fluent(pos_i)
+a9.add_public_fluent(pos_j)
+env.add_agent(a9)
+env.set_initial_value(Dot(a9, pos_x), 7)  # 98
+env.set_initial_value(Dot(a9, pos_y), 3)
+env.set_initial_value(Dot(a9, pos_i), 0)  # 83
+env.set_initial_value(Dot(a9, pos_j), 0)
+# a5.set_initial_position_i_j(0, 0)
+
+a10.add_public_fluent(pos_x)
+a10.add_public_fluent(pos_y)
+a10.add_public_fluent(pos, default_initial_value=False)
+a10.add_state_encoder(StateEncoderMAPRL(a10))
+a10.add_public_fluent(pos_i)
+a10.add_public_fluent(pos_j)
+env.add_agent(a10)
+env.set_initial_value(Dot(a10, pos_x), 4)  # 98
+env.set_initial_value(Dot(a10, pos_y), 7)
+env.set_initial_value(Dot(a10, pos_i), 0)  # 83
+env.set_initial_value(Dot(a10, pos_j), 0)
+# a5.set_initial_position_i_j(0, 0)
 
 env.initialize_location_mapping(coordinates)
 
 
 connections = []
 
+
 is_connected = create_cell_connections(_connections, env)
 is_wall = create_wall_connections(walls, env)
 
 
-door = UserType("door")
-dr1 = Object("dr1", door)
-dr2 = Object("dr2", door)
-dr3 = Object("dr3", door)
-env.add_object(dr1)
-env.add_object(dr2)
-env.add_object(dr3)
-has_door = Fluent("has_door", BoolType(), connect_from=Location, connect_to=Location)
-has_door_manager = Fluent(
-    "has_door_manager", BoolType(), connect_from=Location, connect_to=Location
+bridge = UserType("bridge")
+br1 = Object("br1", bridge)
+br2 = Object("br2", bridge)
+br3 = Object("br3", bridge)
+env.add_object(br1)
+env.add_object(br2)
+env.add_object(br3)
+has_bridge = Fluent(
+    "has_bridge", BoolType(), connect_from=Location, connect_to=Location
 )
-env.ma_environment.add_fluent(has_door, default_initial_value=False)
-env.ma_environment.add_fluent(has_door_manager, default_initial_value=False)
+has_boat = Fluent("has_boat", BoolType(), connect_from=Location, connect_to=Location)
+env.ma_environment.add_fluent(has_bridge, default_initial_value=False)
+env.ma_environment.add_fluent(has_boat, default_initial_value=False)
 
-# Configure doors
-env.set_initial_value(has_door(l13, l14), True)  # TODO verify this connection
-env.set_initial_value(has_door(l14, l13), True)  # TODO verify this connection
+# Configure bridges
+env.set_initial_value(has_bridge(l13, l14), True)
+env.set_initial_value(has_bridge(l14, l13), True)
 env.set_initial_value(is_connected(l13, l14), False)
 env.set_initial_value(is_connected(l14, l13), False)
 
-door_pairs = {("l13", "l14")}
-renderer.object_positions["doors"] = build_connectors(door_pairs, rooms, walls)
-
-env.set_initial_value(has_door_manager(l14, l24), True)  # TODO verify this connection
-env.set_initial_value(has_door_manager(l24, l14), True)  # TODO verify this connection
+env.set_initial_value(has_boat(l14, l24), True)
+env.set_initial_value(has_boat(l24, l14), True)
 env.set_initial_value(is_connected(l14, l24), False)
 env.set_initial_value(is_connected(l24, l14), False)
 
-manager_door_pairs = {("l14", "l24")}
-renderer.object_positions["manager_doors"] = build_connectors(
-    manager_door_pairs, rooms, walls
-)
+bridge_pairs = {("l13", "l14"), ("l78", "l88"), ("l66", "l67"), ("l72", "l73")}
+boat_pairs = {("l14", "l24"), ("l86", "l87"), ("l17", "l18"), ("l28", "l18")}
 
-env.set_initial_value(is_connected(l14, l15), False)
-env.set_initial_value(is_connected(l15, l14), False)
+renderer.object_positions["bridges"] = build_connectors(bridge_pairs, rooms, walls)
+renderer.object_positions["boats"] = build_connectors(boat_pairs, rooms, walls)
+
+# Configure remaining bridge and boat endpoints
+# Dictionary of all locations keyed by name:
+loc_map = {loc.name: loc for loc in locations}
+
+# Access individual objects explicitly:
+l78 = loc_map["l78"]
+l88 = loc_map["l88"]
+l86 = loc_map["l86"]
+l87 = loc_map["l87"]
+l66 = loc_map["l66"]
+l67 = loc_map["l67"]
+l72 = loc_map["l72"]
+l73 = loc_map["l73"]
+l17 = loc_map["l17"]
+l18 = loc_map["l18"]
+l28 = loc_map["l28"]
+
+
+# l17, l18, l28
+env.set_initial_value(has_bridge(l78, l88), True)
+env.set_initial_value(has_bridge(l88, l78), True)
+env.set_initial_value(is_connected(l78, l88), False)
+env.set_initial_value(is_connected(l88, l78), False)
+
+env.set_initial_value(has_boat(l86, l87), True)
+env.set_initial_value(has_boat(l87, l86), True)
+env.set_initial_value(is_connected(l86, l87), False)
+env.set_initial_value(is_connected(l87, l86), False)
+
+env.set_initial_value(has_bridge(l66, l67), True)
+env.set_initial_value(has_bridge(l67, l66), True)
+env.set_initial_value(is_connected(l66, l67), False)
+env.set_initial_value(is_connected(l67, l66), False)
+
+env.set_initial_value(has_bridge(l72, l73), True)
+env.set_initial_value(has_bridge(l73, l72), True)
+env.set_initial_value(is_connected(l72, l73), False)
+env.set_initial_value(is_connected(l73, l72), False)
+
+env.set_initial_value(has_boat(l17, l18), True)
+env.set_initial_value(has_boat(l18, l17), True)
+env.set_initial_value(is_connected(l17, l18), False)
+env.set_initial_value(is_connected(l18, l17), False)
+
+env.set_initial_value(has_boat(l28, l18), True)
+env.set_initial_value(has_boat(l18, l28), True)
+env.set_initial_value(is_connected(l18, l28), False)
+env.set_initial_value(is_connected(l28, l18), False)
+
 
 env.ma_environment.add_fluent(is_connected, default_initial_value=False)
-# Action: move between rooms upward
+# Action: move up between rooms
 move_up = InstantaneousAction("up", l_from=Location, l_to=Location)
 l_from = move_up.parameter("l_from")
 l_to = move_up.parameter("l_to")
@@ -595,7 +791,13 @@ a3.add_rl_action(move_up)
 a4.add_rl_action(move_up)
 a5.add_rl_action(move_up)
 
-# Action: move between rooms downward
+a6.add_rl_action(move_up)
+a7.add_rl_action(move_up)
+a8.add_rl_action(move_up)
+a9.add_rl_action(move_up)
+a10.add_rl_action(move_up)
+
+# Action: move down between rooms
 move_down = InstantaneousAction("down", l_from=Location, l_to=Location)
 move_down.add_precondition(
     LT(pos_y, max_y_value - 1)
@@ -613,6 +815,13 @@ a3.add_rl_action(move_down)
 a4.add_rl_action(move_down)
 a5.add_rl_action(move_down)
 
+a6.add_rl_action(move_down)
+a7.add_rl_action(move_down)
+a8.add_rl_action(move_down)
+a9.add_rl_action(move_down)
+a10.add_rl_action(move_down)
+
+# Action: move left between rooms
 move_left = InstantaneousAction("left", l_from=Location, l_to=Location)
 move_left.add_precondition(LT(0, pos_x))  # Precondition: pos_x > 0
 move_left.add_precondition(is_connected(l_from, l_to))
@@ -627,6 +836,13 @@ a3.add_rl_action(move_left)
 a4.add_rl_action(move_left)
 a5.add_rl_action(move_left)
 
+a6.add_rl_action(move_left)
+a7.add_rl_action(move_left)
+a8.add_rl_action(move_left)
+a9.add_rl_action(move_left)
+a10.add_rl_action(move_left)
+
+# Action: move right between rooms
 move_right = InstantaneousAction("right", l_from=Location, l_to=Location)
 move_right.add_precondition(
     LT(pos_x, max_x_value - 1)
@@ -642,6 +858,12 @@ a2.add_rl_action(move_right)
 a3.add_rl_action(move_right)
 a4.add_rl_action(move_right)
 a5.add_rl_action(move_right)
+
+a6.add_rl_action(move_right)
+a7.add_rl_action(move_right)
+a8.add_rl_action(move_right)
+a9.add_rl_action(move_right)
+a10.add_rl_action(move_right)
 
 
 low_up = InstantaneousAction("low_up", l_from=Location, l_to=Location)
@@ -662,7 +884,7 @@ low_right.add_increase_effect(pos_i, 1)
 
 cross_up = InstantaneousAction("cross_up", l_from=Location, l_to=Location)
 cross_up.add_precondition(LT(0, pos_y))
-cross_up.add_precondition(has_door(l_from, l_to))
+cross_up.add_precondition(has_bridge(l_from, l_to))
 cross_up.add_precondition(Equals(pos_j, 0))
 cross_up.add_decrease_effect(pos_y, 1)
 cross_up.add_effect(pos_j, env.cell_size - 1)
@@ -671,7 +893,7 @@ cross_up.add_effect(pos(l_from), False)
 
 cross_down = InstantaneousAction("cross_down", l_from=Location, l_to=Location)
 cross_down.add_precondition(LT(pos_y, max_y_value - 1))
-cross_down.add_precondition(has_door(l_from, l_to))
+cross_down.add_precondition(has_bridge(l_from, l_to))
 cross_down.add_precondition(Equals(pos_j, env.cell_size - 1))
 cross_down.add_increase_effect(pos_y, 1)
 cross_down.add_effect(pos_j, 0)
@@ -680,7 +902,7 @@ cross_down.add_effect(pos(l_from), False)
 
 cross_right = InstantaneousAction("cross_right", l_from=Location, l_to=Location)
 cross_right.add_precondition(LT(pos_x, max_x_value - 1))
-cross_right.add_precondition(has_door(l_from, l_to))
+cross_right.add_precondition(has_bridge(l_from, l_to))
 cross_right.add_precondition(Equals(pos_i, env.cell_size - 1))
 cross_right.add_increase_effect(pos_x, 1)
 cross_right.add_effect(pos_i, 0)
@@ -689,7 +911,7 @@ cross_right.add_effect(pos(l_from), False)
 
 cross_left = InstantaneousAction("cross_left", l_from=Location, l_to=Location)
 cross_left.add_precondition(LT(0, pos_x))
-cross_left.add_precondition(has_door(l_from, l_to))
+cross_left.add_precondition(has_bridge(l_from, l_to))
 cross_left.add_precondition(Equals(pos_i, 0))
 cross_left.add_decrease_effect(pos_x, 1)
 cross_left.add_effect(pos_i, env.cell_size - 1)
@@ -701,7 +923,7 @@ wait.add_decrease_effect(pos_x, 0)
 
 row_up = InstantaneousAction("row_up", l_from=Location, l_to=Location)
 row_up.add_precondition(LT(0, pos_y))
-row_up.add_precondition(has_door_manager(l_from, l_to))
+row_up.add_precondition(has_boat(l_from, l_to))
 row_up.add_effect(pos_i, env.cell_size - 1)
 row_up.add_decrease_effect(pos_y, 1)
 row_up.add_effect(pos_j, env.cell_size - 1)
@@ -711,7 +933,7 @@ row_up.add_effect(pos(l_from), False)
 
 row_down = InstantaneousAction("row_down", l_from=Location, l_to=Location)
 row_down.add_precondition(LT(pos_y, max_y_value - 1))
-row_down.add_precondition(has_door_manager(l_from, l_to))
+row_down.add_precondition(has_boat(l_from, l_to))
 row_down.add_precondition(Equals(pos_j, env.cell_size - 1))
 row_down.add_increase_effect(pos_y, 1)
 row_down.add_effect(pos_j, 0)
@@ -720,7 +942,7 @@ row_down.add_effect(pos(l_from), False)
 
 row_right = InstantaneousAction("row_right", l_from=Location, l_to=Location)
 row_right.add_precondition(LT(pos_x, max_x_value - 1))
-row_right.add_precondition(has_door_manager(l_from, l_to))
+row_right.add_precondition(has_boat(l_from, l_to))
 row_right.add_precondition(Equals(pos_i, env.cell_size - 1))
 row_right.add_increase_effect(pos_x, 1)
 row_right.add_effect(pos_i, 0)
@@ -729,7 +951,7 @@ row_right.add_effect(pos(l_from), False)
 
 row_left = InstantaneousAction("row_left", l_from=Location, l_to=Location)
 row_left.add_precondition(LT(0, pos_x))
-row_left.add_precondition(has_door_manager(l_from, l_to))
+row_left.add_precondition(has_boat(l_from, l_to))
 row_left.add_precondition(Equals(pos_i, 0))
 row_left.add_decrease_effect(pos_x, 1)
 row_left.add_effect(pos_i, env.cell_size - 1)
@@ -750,10 +972,6 @@ a2.add_rl_action(low_up)
 a2.add_rl_action(low_down)
 a2.add_rl_action(low_left)
 a2.add_rl_action(low_right)
-"""a2.add_rl_action(cross_up)
-a2.add_rl_action(cross_down)
-a2.add_rl_action(cross_right)
-a2.add_rl_action(cross_left)"""
 a2.add_rl_action(wait)
 a2.add_rl_action(row_up)
 a2.add_rl_action(row_down)
@@ -769,6 +987,10 @@ a3.add_rl_action(cross_down)
 a3.add_rl_action(cross_right)
 a3.add_rl_action(cross_left)
 a3.add_rl_action(wait)
+"""a3.add_rl_action(row_up)
+a3.add_rl_action(row_down)
+a3.add_rl_action(row_right)
+a3.add_rl_action(row_left)"""
 
 a4.add_rl_action(low_up)
 a4.add_rl_action(low_down)
@@ -779,6 +1001,10 @@ a4.add_rl_action(cross_down)
 a4.add_rl_action(cross_right)
 a4.add_rl_action(cross_left)
 a4.add_rl_action(wait)
+"""a4.add_rl_action(row_up)
+a4.add_rl_action(row_down)
+a4.add_rl_action(row_right)
+a4.add_rl_action(row_left)"""
 
 a5.add_rl_action(low_up)
 a5.add_rl_action(low_down)
@@ -790,28 +1016,62 @@ a5.add_rl_action(row_down)
 a5.add_rl_action(row_right)
 a5.add_rl_action(row_left)
 
+a6.add_rl_action(low_up)
+a6.add_rl_action(low_down)
+a6.add_rl_action(low_left)
+a6.add_rl_action(low_right)
+a6.add_rl_action(wait)
+a6.add_rl_action(row_up)
+a6.add_rl_action(row_down)
+a6.add_rl_action(row_right)
+a6.add_rl_action(row_left)
 
-def setup_agent_rm(agent, transitions):
-    """
-    Sets up the Reward Machine for a specific agent and adds an event detector for the extracted events.
+a7.add_rl_action(low_up)
+a7.add_rl_action(low_down)
+a7.add_rl_action(low_left)
+a7.add_rl_action(low_right)
+a7.add_rl_action(cross_up)
+a7.add_rl_action(cross_down)
+a7.add_rl_action(cross_right)
+a7.add_rl_action(cross_left)
+a7.add_rl_action(wait)
 
-    :param agent: The agent to set up with the Reward Machine
-    :param transitions: Transitions defining the Reward Machine
-    :return: Reward Machine and event detector instances
-    """
-    RM = RewardMachine(transitions, None)
-    event_detector = PositionEventDetector(RM.extract_events(), agent)
-    RM.event_detector = event_detector
-    agent.set_reward_machine(RM)
-    return RM, event_detector
+a8.add_rl_action(low_up)
+a8.add_rl_action(low_down)
+a8.add_rl_action(low_left)
+a8.add_rl_action(low_right)
+a8.add_rl_action(cross_up)
+a8.add_rl_action(cross_down)
+a8.add_rl_action(cross_right)
+a8.add_rl_action(cross_left)
+a8.add_rl_action(wait)
 
+a9.add_rl_action(low_up)
+a9.add_rl_action(low_down)
+a9.add_rl_action(low_left)
+a9.add_rl_action(low_right)
+a9.add_rl_action(cross_up)
+a9.add_rl_action(cross_down)
+a9.add_rl_action(cross_right)
+a9.add_rl_action(cross_left)
+a9.add_rl_action(wait)
 
+a10.add_rl_action(low_up)
+a10.add_rl_action(low_down)
+a10.add_rl_action(low_left)
+a10.add_rl_action(low_right)
+a10.add_rl_action(wait)
+a10.add_rl_action(row_up)
+a10.add_rl_action(row_down)
+a10.add_rl_action(row_right)
+a10.add_rl_action(row_left)
+
+# Concurrent action sequence
 new_transitions_ag_1 = {
     ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 0),
     ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 0),
     ("state2", ((coordinates_obj["letter"][0], True),)): ("state3", 0),
     ("state3", ((goals["O"], True),)): ("state4", 0),
-    ("state4", ((goals["C"], True),)): ("state5", 0),
 }
 
 new_transitions_ag_2 = {
@@ -819,7 +1079,6 @@ new_transitions_ag_2 = {
     ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 0),
     ("state2", ((coordinates_obj["letter"][0], True),)): ("state3", 0),
     ("state3", ((goals["B"], True),)): ("state4", 0),
-    ("state4", ((goals["O"], True),)): ("state5", 0),
 }
 
 new_transitions_ag_3 = {
@@ -827,7 +1086,6 @@ new_transitions_ag_3 = {
     ("state2", ((coordinates_obj["letter"][0], True),)): ("state3", 0),
     ("state3", ((coordinates_obj["coffee"][0], True),)): ("state4", 0),
     ("state3", ((coordinates_obj["coffee"][1], True),)): ("state4", 0),
-    ("state3", ((goals["O"], True),)): ("state5", 0),
 }
 
 new_transitions_ag_4 = {
@@ -835,7 +1093,6 @@ new_transitions_ag_4 = {
     ("state2", ((coordinates_obj["coffee"][0], True),)): ("state3", 0),
     ("state2", ((coordinates_obj["coffee"][1], True),)): ("state3", 0),
     ("state3", ((coordinates_obj["letter"][0], True),)): ("state4", 0),
-    ("state4", ((goals["B"], True),)): ("state5", 0),
 }
 
 new_transitions_ag_5 = {
@@ -843,7 +1100,6 @@ new_transitions_ag_5 = {
     ("state2", ((coordinates_obj["letter"][0], True),)): ("state3", 0),
     ("state3", ((coordinates_obj["coffee"][0], True),)): ("state4", 0),
     ("state3", ((coordinates_obj["coffee"][1], True),)): ("state4", 0),
-    ("state4", ((goals["O"], True),)): ("state5", 0),
 }
 
 new_transitions_ag_5_and_ag2_exp = {
@@ -863,7 +1119,7 @@ a5_new_transitions_ag_5_and_ag2_exp2 = {
     ("state2", ((goals["C"], True),)): ("state3", 0),
 }
 
-# TODO IQL exp2
+# States for experiment: IQL exp2
 transitions_ag_2_exp2 = {
     ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 0),
     ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 0),
@@ -877,7 +1133,7 @@ transitions_ag_5_exp2 = {
     ("state3", ((("pos(l14)"), True),)): ("state4", 100),
 }
 
-# TODO IQL exp1
+# States for experiment: IQL exp1
 transitions_ag_2_exp1 = {
     ("state1", ((coordinates_obj["coffee"][0], True),)): ("state2", 10),
     ("state1", ((coordinates_obj["coffee"][1], True),)): ("state2", 10),
@@ -889,64 +1145,333 @@ transitions_ag_5_exp1 = {
     ("state2", ((("pos(l14)"), True),)): ("state4", 100),
 }
 
-# TODO IQL exp 0 5agents (only MAP)
+# States for experiment: IQL, exp 0, 5agents (only MAP)
 transitions_ag5_ag2_exp0 = {
     ("state2", ((("pos(l14)"), True),)): ("state4", 100),
 }
 transitions_ag1_ag3_ag4_exp0 = {
     ("state2", ((("pos(l14)"), True),)): ("state4", 100),
 }
-# Funzione principale per eseguire l'esperimento
-def initialize_reward_machines(experiment):
-    """Create and configure Reward Machines and detectors for each agent."""
-    rm_event_pairs = {}
-    for agent_label, agent in AGENT_ORDER:
-        transitions = RM_dict_true_seq[agent_label]
-        rm, event_detector = setup_agent_rm(agent, transitions)
-        rm_event_pairs[agent_label] = (rm, event_detector)
 
-    if experiment == "exp2":
-        rm_event_pairs["a2"][0].add_transitions_with_merge(
-            a2_new_transitions_ag_5_and_ag2_exp2, position="before", prefix="new"
-        )
-        rm_event_pairs["a5"][0].add_transitions_with_merge(
-            a5_new_transitions_ag_5_and_ag2_exp2, position="before", prefix="new"
-        )
-    elif experiment == "exp3":
-        exp3_transitions = {
-            "a1": new_transitions_ag_1,
-            "a2": new_transitions_ag_2,
-            "a3": new_transitions_ag_3,
-            "a4": new_transitions_ag_4,
-            "a5": new_transitions_ag_5,
-        }
-        for agent_label, transitions in exp3_transitions.items():
-            rm_event_pairs[agent_label][0].add_transitions_with_merge(
-                transitions, position="before", prefix="new"
+# States for experiment: ag10 - exp1
+transitions_ag_1 = {
+    ("state4", (("pos(l66)", True),)): ("state5X", 40),
+    (
+        "state5X",
+        (("pos(l66)", True), (("a3", "pos(l66)"), True), (("a4", "pos(l66)"), True)),
+    ): ("state6", 50),
+    ("state6", (("pos(l67)", True),)): ("state7", 60),
+    ("state7", (("pos(l78)", True),)): ("state8X", 40),
+    (
+        "state8X",
+        (("pos(l78)", True), (("a3", "pos(l78)"), True), (("a4", "pos(l78)"), True)),
+    ): ("state9", 50),
+    ("state9", (("pos(l88)", True),)): ("state10", 60),
+}
+transitions_ag_2 = {
+    ("state4", (("pos(l86)", True),)): ("state5X", 40),
+    ("state5X", (("pos(l86)", True), (("a5", "pos(l86)"), True))): ("state6", 50),
+    ("state6", (("pos(l87)", True),)): ("state7", 60),
+}
+transitions_ag_3 = {
+    ("state2", (("pos(l66)", True),)): ("state3X", 20),
+    (
+        "state3X",
+        ((("a1", "pos(l66)"), True), ("pos(l66)", True), (("a4", "pos(l66)"), True)),
+    ): ("state4", 30),
+    ("state4", (("pos(l67)", True),)): ("state5", 40),
+    ("state5", (("pos(l78)", True),)): ("state6X", 40),
+    (
+        "state6X",
+        (("pos(l78)", True), (("a1", "pos(l78)"), True), (("a4", "pos(l78)"), True)),
+    ): ("state7", 50),
+    ("state7", (("pos(l88)", True),)): ("state8", 60),
+}
+transitions_ag_4 = {
+    ("state1", (("pos(l66)", True),)): ("state2X", 10),
+    (
+        "state2X",
+        ((("a1", "pos(l66)"), True), (("a3", "pos(l66)"), True), ("pos(l66)", True)),
+    ): ("state3", 20),
+    ("state3", (("pos(l67)", True),)): ("state4", 30),
+    ("state4", (("pos(l78)", True),)): ("state5X", 40),
+    (
+        "state5X",
+        (("pos(l78)", True), (("a3", "pos(l78)"), True), (("a1", "pos(l78)"), True)),
+    ): ("state6", 50),
+    ("state6", (("pos(l88)", True),)): ("state7", 60),
+}
+transitions_ag_5 = {
+    ("state1", (("pos(l86)", True),)): ("state1X", 10),
+    ("state1X", ((("a2", "pos(l86)"), True), ("pos(l86)", True))): ("state2", 20),
+    ("state2", (("pos(l87)", True),)): ("state3", 30),
+}
+
+transitions_ag_6 = {
+    ("state4", (("pos(l24)", True),)): ("state5X", 40),
+    ("state5X", (("pos(l24)", True), (("a10", "pos(l24)"), True))): ("state6", 50),
+    ("state6", (("pos(l14)", True),)): ("state7", 60),
+}
+transitions_ag_7 = {
+    ("state2", (("pos(l13)", True),)): ("state3X", 20),
+    (
+        "state3X",
+        ((("a8", "pos(l13)"), True), ("pos(l13)", True), (("a9", "pos(l13)"), True)),
+    ): ("state4", 30),
+    ("state4", (("pos(l14)", True),)): ("state5", 40),
+}
+transitions_ag_8 = {
+    ("state2", (("pos(l13)", True),)): ("state3X", 20),
+    (
+        "state3X",
+        ((("a7", "pos(l13)"), True), ("pos(l13)", True), (("a9", "pos(l13)"), True)),
+    ): ("state4", 30),
+    ("state4", (("pos(l14)", True),)): ("state5", 40),
+}
+transitions_ag_9 = {
+    ("state1", (("pos(l13)", True),)): ("state2X", 10),
+    (
+        "state2X",
+        ((("a7", "pos(l13)"), True), (("a8", "pos(l13)"), True), ("pos(l13)", True)),
+    ): ("state3", 20),
+    ("state3", (("pos(l14)", True),)): ("state4", 30),
+}
+transitions_ag_10 = {
+    ("state1", (("pos(l24)", True),)): ("state1X", 10),
+    ("state1X", ((("a6", "pos(l24)"), True), ("pos(l24)", True))): ("state2", 20),
+    ("state2", (("pos(l14)", True),)): ("state3", 30),
+}
+
+
+# States for experiment: exp2
+new_transitions_ag_exp2_PRE = {
+    ("state1", ((goals["O"], True),)): ("state2", 0),
+    ("state2", ((coordinates_obj["coffee"][0], True),)): ("state3", 0),
+    ("state2", ((coordinates_obj["coffee"][1], True),)): ("state3", 0),
+    ("state2", ((coordinates_obj["coffee"][2], True),)): ("state3", 0),
+}
+"""new_transitions_ag_exp2_POST = {
+    ("state10", ((coordinates_obj["letter"][0], True),)): ("state11", 0),
+}"""
+
+# States for experiment: exp3 ag:7/8/9 cross/up_stone in B together with ag:1/3/4
+new_transitions_ag_1_exp3 = {
+    ("state12", (("pos(l72)", True),)): ("state13X", 20),
+    (
+        "state13X",
+        (
+            (("a8", "pos(l72)"), True),
+            ("pos(l72)", True),
+            (("a9", "pos(l72)"), True),
+            (("a7", "pos(l72)"), True),
+            (("a3", "pos(l72)"), True),
+            (("a4", "pos(l72)"), True),
+        ),
+    ): ("state14", 30),
+    ("state14", (("pos(l73)", True),)): ("state15", 40),
+}
+new_transitions_ag_2_exp3 = {
+    ("state14", (("pos(l17)", True),)): ("state15X", 40),
+    (
+        "state15X",
+        (
+            ("pos(l17)", True),
+            (("a5", "pos(l17)"), True),
+        ),
+    ): ("state16", 50),
+    ("state16", (("pos(l18)", True),)): ("state17", 60),
+}
+new_transitions_ag_3_exp3 = {
+    ("state12", (("pos(l72)", True),)): ("state13X", 20),
+    (
+        "state13X",
+        (
+            (("a8", "pos(l72)"), True),
+            ("pos(l72)", True),
+            (("a9", "pos(l72)"), True),
+            (("a7", "pos(l72)"), True),
+            (("a1", "pos(l72)"), True),
+            (("a4", "pos(l72)"), True),
+        ),
+    ): ("state14", 30),
+    ("state14", (("pos(l73)", True),)): ("state15", 40),
+}
+new_transitions_ag_4_exp3 = {
+    ("state12", (("pos(l72)", True),)): ("state13X", 20),
+    (
+        "state13X",
+        (
+            (("a8", "pos(l72)"), True),
+            ("pos(l72)", True),
+            (("a9", "pos(l72)"), True),
+            (("a7", "pos(l72)"), True),
+            (("a3", "pos(l72)"), True),
+            (("a1", "pos(l72)"), True),
+        ),
+    ): ("state14", 30),
+    ("state14", (("pos(l73)", True),)): ("state15", 40),
+}
+new_transitions_ag_5_exp3 = {
+    ("state11", (("pos(l17)", True),)): ("state11X", 10),
+    (
+        "state11X",
+        (
+            ("pos(l17)", True),
+            (("a2", "pos(l17)"), True),
+        ),
+    ): ("state12", 20),
+    ("state12", (("pos(l18)", True),)): ("state13", 30),
+}
+
+new_transitions_ag_6_exp3 = {
+    ("state14", (("pos(l28)", True),)): ("state15X", 40),
+    (
+        "state15X",
+        (
+            ("pos(l28)", True),
+            (("a10", "pos(l28)"), True),
+        ),
+    ): ("state16", 50),
+    ("state16", (("pos(l18)", True),)): ("state17", 60),
+}
+new_transitions_ag_7_exp3 = {
+    ("state12", (("pos(l72)", True),)): ("state13X", 20),
+    (
+        "state13X",
+        (
+            (("a8", "pos(l72)"), True),
+            ("pos(l72)", True),
+            (("a9", "pos(l72)"), True),
+            (("a1", "pos(l72)"), True),
+            (("a3", "pos(l72)"), True),
+            (("a4", "pos(l72)"), True),
+        ),
+    ): ("state14", 30),
+    ("state14", (("pos(l73)", True),)): ("state15", 40),
+}
+new_transitions_ag_8_exp3 = {
+    ("state12", (("pos(l72)", True),)): ("state13X", 20),
+    (
+        "state13X",
+        (
+            (("a7", "pos(l72)"), True),
+            ("pos(l72)", True),
+            (("a9", "pos(l72)"), True),
+            (("a1", "pos(l72)"), True),
+            (("a3", "pos(l72)"), True),
+            (("a4", "pos(l72)"), True),
+        ),
+    ): ("state14", 30),
+    ("state14", (("pos(l73)", True),)): ("state15", 40),
+}
+new_transitions_ag_9_exp3 = {
+    ("state12", (("pos(l72)", True),)): ("state13X", 20),
+    (
+        "state13X",
+        (
+            (("a7", "pos(l72)"), True),
+            ("pos(l72)", True),
+            (("a8", "pos(l72)"), True),
+            (("a1", "pos(l72)"), True),
+            (("a3", "pos(l72)"), True),
+            (("a4", "pos(l72)"), True),
+        ),
+    ): ("state14", 30),
+    ("state14", (("pos(l73)", True),)): ("state15", 40),
+}
+new_transitions_ag_10_exp3 = {
+    ("state11", (("pos(l28)", True),)): ("state11X", 10),
+    (
+        "state11X",
+        (
+            ("pos(l28)", True),
+            (("a6", "pos(l28)"), True),
+        ),
+    ): ("state12", 20),
+    ("state12", (("pos(l18)", True),)): ("state13", 30),
+}
+# TODO###################################################################################################################
+
+
+def initialize_reward_machines(experiment):
+    """Configure Reward Machines for each agent and adjust per experiment settings."""
+    reward_machines = {}
+
+    for agent_name in AGENT_ORDER:
+        base_transitions = copy.deepcopy(EXP1_TRANSITIONS[agent_name])
+        rm = RewardMachine(base_transitions, None)
+
+        if experiment in {"exp2", "exp3"}:
+            rm.add_transitions_with_merge(
+                copy.deepcopy(EXP2_PRE_TRANSITIONS),
+                position="before",
+                prefix="exp2",
             )
 
-    for agent_label, (rm, event_detector) in rm_event_pairs.items():
-        event_detector.add_events(rm.extract_events())
+        if experiment == "exp3":
+            rm.add_transitions_with_merge(
+                copy.deepcopy(EXP3_TRANSITIONS[agent_name]),
+                position="before",
+                prefix="exp3",
+            )
+
+        event_detector = PositionEventDetector(
+            rm.extract_events(), AGENTS_BY_LABEL[agent_name]
+        )
         rm.event_detector = event_detector
-        AGENTS_BY_LABEL[agent_label].set_reward_machine(rm)
+        AGENTS_BY_LABEL[agent_name].set_reward_machine(rm)
+        reward_machines[agent_name] = rm
 
-    return {agent_label: rm for agent_label, (rm, _) in rm_event_pairs.items()}
+    return reward_machines
 
+
+EXP1_TRANSITIONS = {
+    "a1": transitions_ag_1,
+    "a2": transitions_ag_2,
+    "a3": transitions_ag_3,
+    "a4": transitions_ag_4,
+    "a5": transitions_ag_5,
+    "a6": transitions_ag_6,
+    "a7": transitions_ag_7,
+    "a8": transitions_ag_8,
+    "a9": transitions_ag_9,
+    "a10": transitions_ag_10,
+}
+
+EXP2_PRE_TRANSITIONS = new_transitions_ag_exp2_PRE
+
+EXP3_TRANSITIONS = {
+    "a1": new_transitions_ag_1_exp3,
+    "a2": new_transitions_ag_2_exp3,
+    "a3": new_transitions_ag_3_exp3,
+    "a4": new_transitions_ag_4_exp3,
+    "a5": new_transitions_ag_5_exp3,
+    "a6": new_transitions_ag_6_exp3,
+    "a7": new_transitions_ag_7_exp3,
+    "a8": new_transitions_ag_8_exp3,
+    "a9": new_transitions_ag_9_exp3,
+    "a10": new_transitions_ag_10_exp3,
+}
+
+
+"""transitions_ag_6 ={("state2", ((("pos(l14)"), True),)): ("state4", 100)}
+transitions_ag_7 ={("state2", ((("pos(l14)"), True),)): ("state4", 100)}
+transitions_ag_8 ={("state2", ((("pos(l14)"), True),)): ("state4", 100)}
+transitions_ag_9 ={("state2", ((("pos(l14)"), True),)): ("state4", 100)}
+transitions_ag_10 ={("state2", ((("pos(l14)"), True),)): ("state4", 100)}
+"""
 
 # Funzione principale per eseguire l'esperimento
 def run_experiment(num_episodes, wandb_enabled, experiment):
-    """Run a training session for the selected experiment variant."""
-    reward_machines = initialize_reward_machines(experiment)
+    """Train all agents for the chosen experiment and handle logging configuration."""
     if wandb_enabled:
         wandb.init(project="maze_RL_new", entity="alee8", mode="online")
     else:
         wandb.init(project="maze_RL_new", entity="alee8", mode="disabled")
     global NUM_EPISODES
     NUM_EPISODES = num_episodes
-    # TODO deccomentare
-    rm_env = RMEnvironmentWrapper(
-        env, [a1, a2, a3, a4, a5]
-    )  # [a2, a5]) #[a1, a2, a3, a4, a5])
+    reward_machines = initialize_reward_machines(experiment)
+    rm_env = RMEnvironmentWrapper(env, ALL_AGENTS)  # [a2, a5]) #[a1, a2, a3, a4, a5])
     q_learning1 = QLearning(
         state_space_size=env.grid_width
         * env.grid_height
@@ -1037,17 +1562,110 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
         use_qrm=True,
     )
 
+    q_learning6 = QLearning(
+        state_space_size=env.grid_width
+        * env.grid_height
+        * env.cell_size
+        * env.cell_size
+        * reward_machines["a6"].numbers_state(),  # env.num_rm_states,
+        action_space_size=13,
+        learning_rate=0.5,
+        gamma=0.9,
+        action_selection="greedy",
+        epsilon_start=0.1,
+        epsilon_end=0.1,
+        epsilon_decay=0.9995,
+        seed=47,
+        qtable_init=2,
+        use_qrm=True,
+    )
+    q_learning7 = QLearning(
+        state_space_size=env.grid_width
+        * env.grid_height
+        * env.cell_size
+        * env.cell_size
+        * reward_machines["a7"].numbers_state(),  # env.num_rm_states,
+        action_space_size=13,
+        learning_rate=0.5,
+        gamma=0.9,
+        action_selection="greedy",
+        epsilon_start=0.1,
+        epsilon_end=0.1,
+        epsilon_decay=0.9995,
+        seed=48,
+        qtable_init=2,
+        use_qrm=True,
+    )
+    q_learning8 = QLearning(
+        state_space_size=env.grid_width
+        * env.grid_height
+        * env.cell_size
+        * env.cell_size
+        * reward_machines["a8"].numbers_state(),  # env.num_rm_states,
+        action_space_size=13,
+        learning_rate=0.5,
+        gamma=0.9,
+        action_selection="greedy",
+        epsilon_start=0.1,
+        epsilon_end=0.1,
+        epsilon_decay=0.9995,
+        seed=49,
+        qtable_init=2,
+        use_qrm=True,
+    )
+    q_learning9 = QLearning(
+        state_space_size=env.grid_width
+        * env.grid_height
+        * env.cell_size
+        * env.cell_size
+        * reward_machines["a9"].numbers_state(),  # env.num_rm_states,
+        action_space_size=13,
+        learning_rate=0.5,
+        gamma=0.9,
+        action_selection="greedy",
+        epsilon_start=0.1,
+        epsilon_end=0.1,
+        epsilon_decay=0.9995,
+        seed=50,
+        qtable_init=2,
+        use_qrm=True,
+    )
+    q_learning10 = QLearning(
+        state_space_size=env.grid_width
+        * env.grid_height
+        * env.cell_size
+        * env.cell_size
+        * reward_machines["a10"].numbers_state(),  # env.num_rm_states,
+        action_space_size=13,
+        learning_rate=0.5,
+        gamma=0.9,
+        action_selection="greedy",
+        epsilon_start=0.1,
+        epsilon_end=0.1,
+        epsilon_decay=0.9995,
+        seed=51,
+        qtable_init=2,
+        use_qrm=True,
+    )
+
     a1.set_learning_algorithm(q_learning1)
     a2.set_learning_algorithm(q_learning2)
     a3.set_learning_algorithm(q_learning3)
     a4.set_learning_algorithm(q_learning4)
     a5.set_learning_algorithm(q_learning5)
 
-    successi_per_agente = {agent.name: 0 for agent in env.agents}
-    ricompense_per_episodio = {agent.name: [] for agent in env.agents}
+    a6.set_learning_algorithm(q_learning6)
+    a7.set_learning_algorithm(q_learning7)
+    a8.set_learning_algorithm(q_learning8)
+    a9.set_learning_algorithm(q_learning9)
+    a10.set_learning_algorithm(q_learning10)
+
+    success_per_agent = {agent.name: 0 for agent in env.agents}
+    rewards_per_episode = {agent.name: [] for agent in env.agents}
     actions_log = {}
     q_tables = {}
     total_step = 0
+    # env.reset()
     rm_env.env.initialize_state()
 
     seed = 111
@@ -1061,16 +1679,16 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
         total_steps_per_agent = {a.name: 0 for a in rm_env.agents}
         episode_total_steps = 0
 
-        # Determine whether this is a test episode
-        test_episode = (episode % 100 == 0) and (episode != 0)
+        # Determine if this is a test episode
+        test_episode = episode % 100 == 0
 
         # Set the exploration flag
         if test_episode:
             exploration = False  # Use the optimal policy
         else:
-            exploration = True  # Use an exploratory policy
+            exploration = True  # Use the policy with exploration
 
-        record_episode = episode % 500 == 0 and episode != 0
+        record_episode = episode % 10000 == 0 and episode != 0
         if record_episode:
             renderer.render(episode, states)  # Capture frames during the episode
             actions_log = {agent.name: [] for agent in env.agents}
@@ -1079,7 +1697,7 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
             total_training_steps += 1
             episode_total_steps += 1
             actions = {}
-            rewards = {a.name: 0 for a in rm_env.agents}  # Initialize episode rewards
+            rewards = {a.name: 0 for a in rm_env.agents}  # Initialize episodic rewards
             infos = {a.name: {} for a in rm_env.agents}
             for ag in rm_env.agents:
                 if not rm_env.env.active_agents.get(ag.name, True):
@@ -1087,7 +1705,7 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
                 current_state = rm_env.env.get_state(ag)
                 action = ag.select_action(current_state, best=not exploration)
                 actions[ag.name] = action
-                # Log actions during the last recorded episode
+                # Log actions in the recorded episode
                 if record_episode:
                     actions_log[ag.name].append(actions[ag.name].name)
             new_states, rewards, done, truncations, infos = rm_env.step(actions)
@@ -1100,9 +1718,9 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
                     not rm_env.env.active_agents[agent.name]
                     and not agent_just_terminated
                 ):
-                    continue  # Skip inactive agents that did not just terminate
+                    continue  # Skip inactive agents that have not just terminated
 
-                # Update the step count per agent
+                # Update the step count for each agent
                 total_steps_per_agent[agent.name] += 1
 
                 agent.update_policy(
@@ -1115,7 +1733,7 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
                 )
                 rewards_agents[agent.name] += rewards[agent.name]
 
-            # Update agent states after processing rewards
+            # Update agent state after processing rewards
             for agent in rm_env.agents:
                 if done.get(agent.name, False):
                     rm_env.env.active_agents[agent.name] = False
@@ -1131,7 +1749,7 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
             renderer.save_episode(
                 episode
             )  # Save the video only at the end of the episode
-        # After the episode, log data if it is a test episode
+        # After the episode, log data if this is a test episode
         if test_episode and wandb_enabled:
             log_data = {
                 "total_steps_episode": episode_total_steps,  # Total steps to complete the episode
@@ -1157,9 +1775,9 @@ def run_experiment(num_episodes, wandb_enabled, experiment):
 
 # Configure argparse to handle the command line
 def parse_args():
-    """Parse command-line options for experiment selection and logging."""
+    """Parse command-line flags for running the temple quest experiments."""
     parser = argparse.ArgumentParser(
-        description="Run multi-agent experiments on maze RL"
+        description="Run multi-agent experiments on the maze RL environment"
     )
     parser.add_argument(
         "--num_episodes",
@@ -1168,15 +1786,13 @@ def parse_args():
         help="Number of episodes to run the learning loop",
     )
     parser.add_argument(
-        "--wandb_enabled",
-        action="store_true",
-        help="Enable sending logs to Weights & Biases",
+        "--wandb_enabled", action="store_true", help="Enable sending logs to WandB"
     )
     parser.add_argument(
         "--experiment",
         choices=["exp1", "exp2", "exp3"],
         default="exp1",
-        help="Select the task to execute",
+        help="Select which task to execute",
     )
     return parser.parse_args()
 
@@ -1185,6 +1801,7 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
+    # Run the experiment with the parameters defined by argparse
     run_experiment(
         num_episodes=args.num_episodes,
         wandb_enabled=args.wandb_enabled,
