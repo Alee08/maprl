@@ -7,6 +7,12 @@ from multiagentplanning_rl.utils.message import Message
 from multiagentplanning_rl.environments.integration_planning_and_learning.ma_environment import (
     MAP_RL_Env,
 )
+from multiagentplanning_rl.environments.integration_planning_and_learning.common_setup import (
+    build_connectors,
+    build_object_positions,
+    find_connector_between_rooms,
+    generate_grid_locations_and_coordinates,
+)
 from multiagentplanning_rl.render.render import EnvironmentRenderer
 from multiagentplanning_rl.environments.integration_planning_and_learning.state_encoder import (
     StateEncoderMAPRL,
@@ -59,23 +65,6 @@ GRID_DIMENSIONS = {"large": (8, 8, 8), "medium": (5, 5, 5), "small": (4, 4, 4)}
 grid_height, grid_width, grid_size = GRID_DIMENSIONS[MAP_SELECTION]
 # Parse the map
 coordinates_obj, goals, walls, rooms, _connections = parse_office_world_(MAP)
-
-
-def build_object_positions(coordinates, walls, extra=None):
-    """Create default object locations and merge optional extra positions."""
-    base_positions = {
-        "plant": coordinates["plant"],
-        "coffee": coordinates["coffee"],
-        "letter": coordinates["letter"],
-        "office_walls": walls,
-    }
-
-    if extra:
-        base_positions.update(extra)
-
-    return base_positions
-
-
 object_positions = build_object_positions(
     coordinates_obj,
     walls,
@@ -162,36 +151,6 @@ l41 = Object("l41", Location)
 l42 = Object("l42", Location)
 l43 = Object("l43", Location)
 l44 = Object("l44", Location)
-
-
-def generate_grid_locations_and_coordinates(grid_size):
-    """
-    Generates locations and corresponding coordinates for a grid of given size.
-
-    :param grid_size: Size of the grid (number of rows/columns)
-    :return: List of location objects and a list of coordinate-location pairs
-    """
-    Location = UserType("Location")
-
-    locations = []  # List to track created locations
-    coordinates = []  # List to track coordinates and corresponding locations
-
-    # Loop through grid rows and columns to generate locations and coordinates
-    for row in range(1, grid_size + 1):
-        for col in range(1, grid_size + 1):
-            # Create location name based on row and column
-            location_name = f"l{row}{col}"
-
-            # Create a Location object with the generated name
-            location = Object(location_name, Location)
-
-            # Add the Location object to the list of locations
-            locations.append(location)
-
-            # Add the coordinate-location pair to the list of coordinates
-            coordinates.append(((row - 1, col - 1), location))
-
-    return locations, coordinates
 
 
 def connect_locations(locations, grid_size):
@@ -311,40 +270,6 @@ def create_wall_connections(walls, env):
         )
 
     return is_wall
-
-
-def find_connector_between_rooms(room_a, room_b, walls_set):
-    """Return the first pair of adjacent cells between two rooms without a wall."""
-
-    room_b_cells = set(room_b)
-    for x, y in room_a:
-        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-            neighbor = (x + dx, y + dy)
-            if neighbor in room_b_cells and ((x, y), neighbor) not in walls_set:
-                return (x, y), neighbor
-    return None
-
-
-def build_connectors(pairs, rooms, walls):
-    """Build drawable connectors for the provided room pairs."""
-
-    walls_set = set()
-    for cell_a, cell_b in walls:
-        walls_set.add((cell_a, cell_b))
-        walls_set.add((cell_b, cell_a))
-
-    connectors = []
-    for room_a, room_b in pairs:
-        if room_a not in rooms or room_b not in rooms:
-            continue
-
-        connector_cells = find_connector_between_rooms(
-            rooms[room_a], rooms[room_b], walls_set
-        )
-        if connector_cells:
-            connectors.append(connector_cells)
-
-    return connectors
 
 
 def test_policy(rm_env, episode, play=False):
