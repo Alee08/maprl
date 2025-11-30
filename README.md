@@ -26,6 +26,16 @@ This repository provides the **MAPRL library** that performs POP→RM synthesis 
 
 ---
 
+## Environments
+
+<p align="center">
+  <img src="multiagentplanning_rl/render/img/office_world_exp.png" alt="Office World environment" width="32%">
+  <img src="multiagentplanning_rl/render/img/maze_exp.png" alt="Concurrent Maze environment" width="32%">
+  <img src="multiagentplanning_rl/render/img/temple_quest8_exp.png" alt="Temple Quest environment" width="32%">
+</p>
+<p align="center"><em>From left to right: Office World, Concurrent Maze, Temple Quest.</em></p>
+
+
 ## Planning pipeline in MAPRL
 
 The “planning” side of MAPRL is implemented using the multi-agent extension of [Unified Planning](https://github.com/aiplan4eu/unified-planning):
@@ -155,7 +165,7 @@ map_1 = """
  🟩 🟩 🟩 🚪 🟩 🟩 🟩 🚪 🟩 🪴 🟩 🚪 🟩 🟩 🟩
  🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 ⛔ O  🪴 🟩
  ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪
- 🟩 🟩 🟩 ⛔ ✉️ 🪴 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
+ 🟩 🟩 🟩 ⛔ ✉️  🪴 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
  🟩 🪴 🟩 🚪 🟩 🪴 🟩 ⛔ 🪴 🪴 🟩 🚪 🟩 🪴 🪴
  🟩 🟩 🟩 ⛔ 🟩 🟩 🟩 🚪 🟩 🟩 🟩 ⛔ 🟩 🟩 🟩
  ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ 🚪 ⛔ ⛔ ⛔ ⛔ 🚪
