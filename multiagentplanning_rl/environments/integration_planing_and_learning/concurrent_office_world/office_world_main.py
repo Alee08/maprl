@@ -3,7 +3,7 @@ from multiagentplanning_rl.multi_agent.reward_machine import RewardMachine
 from unified_planning.shortcuts import *
 from multiagentplanning_rl.environments.utils_envs.evaluation_metrics import *
 import json
-from multiagentplanning_rl.environments.integration_planing_and_learning.building_RM import (
+from multiagentplanning_rl.environments.integration_planing_and_learning.building_rm import (
     load_plan_and_problem,
     build_reward_machine,
 )

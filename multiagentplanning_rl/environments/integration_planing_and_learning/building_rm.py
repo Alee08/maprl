@@ -897,10 +897,10 @@ def build_reward_machine(
     return {
         "direct_dependencies": dipendenze_dirette,
         "dependency_metadata": data_dep,
-        "sequenza": sequenza,
-        "nuovo_piano": nuovo_piano,
-        "risultati": risultati,
-        "nuovo_acts_aggiornato": nuovo_acts_aggiornato,
+        "sequence": sequenza,
+        "new_plan": nuovo_piano,
+        "results": risultati,
+        "updated_concurrent_actions": nuovo_acts_aggiornato,
         "RM_dict": RM_dict,
         "RM_dict_true": RM_dict_true,
         "RM_dict_true_seq": RM_dict_true_seq,
@@ -910,15 +910,15 @@ def build_reward_machine(
 def main() -> None:
     """Entrypoint that loads sample data and builds the reward machine."""
     pop_plan, problem = load_plan_and_problem(
-        "planning_utils/result_maze_5_agents.pkl",
-        "planning_utils/problem_maze_5_agents.pkl",
+        "planning_utils/result_office_5_agents.pkl",
+        "planning_utils/problem_office_5_agents.pkl",
     )
     build_reward_machine(pop_plan, problem)
 
 
 # The functions above can be imported without triggering any side effects.
 # The following guard only executes the default pipeline when the module is
-# run directly (e.g., `python building_RM.py`). When the module is imported
+# run directly (e.g., `python building_rm.py`). When the module is imported
 # elsewhere, `main` is not executed, allowing callers to invoke
 # `load_plan_and_problem` or `build_reward_machine` explicitly.
 if __name__ == "__main__":

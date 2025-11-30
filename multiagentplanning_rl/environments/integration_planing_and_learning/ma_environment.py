@@ -9,7 +9,7 @@ from multiagentplanning_rl.utils.ma_sequential_simulator import (
 import cProfile
 import json
 import pickle
-from multiagentplanning_rl.environments.integration_planing_and_learning.building_RM import (
+from multiagentplanning_rl.environments.integration_planing_and_learning.building_rm import (
     build_reward_machine,
 )
 from multiagentplanning_rl.utils.message import Message
