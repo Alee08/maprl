@@ -17,6 +17,12 @@ The planner produces a POP, the POP is compiled into **one RM per agent**, and e
 
 This repository provides the **MAPRL library** that performs POP→RM synthesis and exposes utilities to coordinate distributed learners via RMs, together with grid-based environments and thin wrappers that expose RM state to learners.
 
+<p align="center">
+  <img src="multiagentplanning_rl/render/img/MAPRL_scheme.png" alt="MAPRL planning-to-RM pipeline" width="75%">
+</p>
+<p align="center"><em>Pipeline of MAPRL. The off-line planning phase yields a partial-order plan, from
+which reward machines are extracted to guide on-line decentralized learning.</em></p>
+
 ### Key features
 
 - Transforms a multi-agent planning problem (MAP) into a partial-order plan (POP), then into one Reward Machine (RM) per agent.
